@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mb-8">
+    <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">จัดการวิดีโอ</h2>
+    <p class="text-slate-400">สร้างโฟลเดอร์ซีรีส์และแปลงลิงก์ M3U8 เป็นไฟล์สำหรับสตรีมมิ่ง</p>
+</div>
+
+<div class="space-y-8">
+    <!-- Section 1: Create Series Folder -->
+    <div class="glass-panel p-6 md:p-8 rounded-2xl relative overflow-hidden group">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none group-hover:bg-blue-500/20 transition-all"></div>
+        
+        <div class="flex items-center gap-3 mb-6 relative z-10">
+            <div class="bg-blue-500/20 p-2.5 rounded-xl">
+                <i class="fa-solid fa-folder-plus text-blue-400 text-xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-white">สร้างโฟลเดอร์ชื่อเรื่อง</h3>
+        </div>
+        
+        <div class="flex flex-col md:flex-row gap-4 relative z-10">
+            <div class="relative flex-1">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <i class="fa-solid fa-film text-slate-500"></i>
+                </div>
+                <input type="text" id="series-name" placeholder="ตั้งชื่อเรื่อง เช่น มังกรคลัง" class="w-full bg-slate-900/50 text-white border border-slate-700/50 rounded-xl pl-11 pr-4 py-3.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-500">
+            </div>
+            <button onclick="createSeries()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-3.5 px-8 rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 whitespace-nowrap">
+                <i class="fa-solid fa-plus"></i> สร้างโฟลเดอร์
+            </button>
+        </div>
+    </div>
+
+    <!-- Section 2: Convert URL to Episode -->
+    <div class="glass-panel p-6 md:p-8 rounded-2xl relative overflow-hidden group">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none group-hover:bg-purple-500/20 transition-all"></div>
+        
+        <div class="flex items-center gap-3 mb-6 relative z-10">
+            <div class="bg-purple-500/20 p-2.5 rounded-xl">
+                <i class="fa-solid fa-wand-magic-sparkles text-purple-400 text-xl"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-white">แปลง URL เป็นโฟลเดอร์ตอน</h3>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+            <!-- Search & Select Series -->
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">เลือกชื่อเรื่องซีรีส์ <span class="text-red-400">*</span></label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fa-solid fa-folder text-slate-500"></i>
+                    </div>
+                    <select id="series-select" class="w-full bg-slate-900/50 text-white border border-slate-700/50 rounded-xl pl-11 pr-10 py-3.5 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 appearance-none transition-all">
+                        <option value="">กำลังโหลด...</option>
+                    </select>
+                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                        <i class="fa-solid fa-chevron-down text-slate-500 text-xs"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- EP Name -->
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">ชื่อตอน <span class="text-red-400">*</span></label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fa-solid fa-hashtag text-slate-500"></i>
+                    </div>
+                    <input type="text" id="ep-name" placeholder="เช่น EP1, EP2" class="w-full bg-slate-900/50 text-white border border-slate-700/50 rounded-xl pl-11 pr-4 py-3.5 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all placeholder-slate-500">
+                </div>
+            </div>
+
+            <!-- URL Input -->
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-slate-300 mb-2">URL M3U8 ต้นทาง <span class="text-red-400">*</span></label>
+                <div class="flex gap-3">
+                    <div class="relative flex-1">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fa-solid fa-link text-slate-500"></i>
+                        </div>
+                        <input type="text" id="m3u8-url" placeholder="https://example.com/video.m3u8" class="w-full bg-slate-900/50 text-white border border-slate-700/50 rounded-xl pl-11 pr-4 py-3.5 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all placeholder-slate-500 font-mono text-sm">
+                    </div>
+                    <button onclick="pasteUrl()" class="bg-slate-700/50 hover:bg-slate-600/80 text-white px-5 py-3.5 rounded-xl transition-all border border-slate-600/50 flex items-center gap-2" title="วางจากคลิปบอร์ด">
+                        <i class="fa-solid fa-paste"></i> <span class="hidden sm:inline">วางลิ้งก์</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Action Button -->
+            <div class="md:col-span-2 mt-2">
+                <button onclick="startConversion()" id="convert-btn" class="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-medium py-4 rounded-xl transition-all shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2 text-lg">
+                    <i class="fa-solid fa-bolt"></i> เริ่มสร้างและแปลงไฟล์
+                </button>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progress-container" class="md:col-span-2 hidden mt-2 bg-slate-900/60 p-5 md:p-6 rounded-2xl border border-white/5 shadow-inner">
+                <div class="flex justify-between items-end mb-3">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-circle-notch fa-spin text-purple-400 text-xl" id="progress-spinner"></i>
+                        <span id="progress-status" class="text-slate-300 font-medium">กำลังเตรียมการประมวลผล...</span>
+                    </div>
+                    <span id="progress-percent" class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-400">0%</span>
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner border border-slate-700/50">
+                    <div id="progress-bar" class="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500 ease-out relative" style="width: 0%">
+                        <div class="absolute top-0 left-0 w-full h-full bg-white/20" style="animation: shimmer 2s infinite linear; background-image: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);"></div>
+                    </div>
+                </div>
+                
+                <!-- Result URL -->
+                <div id="result-container" class="hidden mt-6 pt-6 border-t border-white/5">
+                    <div class="flex items-center gap-2 text-emerald-400 mb-3 font-medium">
+                        <div class="bg-emerald-500/20 p-1.5 rounded-full"><i class="fa-solid fa-check"></i></div>
+                        ประมวลผลสำเร็จพร้อมใช้งาน
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <div class="relative flex-1">
+                            <input type="text" id="result-url" readonly class="w-full bg-slate-950 text-slate-300 border border-slate-700 rounded-xl pl-4 pr-4 py-3 text-sm focus:outline-none font-mono">
+                        </div>
+                        <button onclick="copyResult()" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap">
+                            <i class="fa-solid fa-copy"></i> คัดลอก
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', loadSeries);
+
+    async function loadSeries() {
+        const select = document.getElementById('series-select');
+        try {
+            const data = await fetchSeriesOptions();
+            select.innerHTML = '<option value="">-- กรุณาเลือกซีรีส์ --</option>';
+            data.forEach(folder => {
+                select.innerHTML += `<option value="${folder}">${folder}</option>`;
+            });
+        } catch (e) {
+            select.innerHTML = '<option value="">โหลดข้อมูลล้มเหลว</option>';
+        }
+    }
+
+    async function createSeries() {
+        const nameInput = document.getElementById('series-name');
+        const name = nameInput.value.trim();
+        
+        if (!name) {
+            showToast('กรุณากรอกชื่อเรื่อง', true);
+            return;
+        }
+        
+        try {
+            const res = await fetch('/api/series', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name})
+            });
+            
+            if (res.ok) {
+                showToast('สร้างโฟลเดอร์สำเร็จ');
+                nameInput.value = '';
+                loadSeries(); // reload select
+            } else {
+                showToast('เกิดข้อผิดพลาดในการสร้าง', true);
+            }
+        } catch (e) {
+            showToast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', true);
+        }
+    }
+
+    async function pasteUrl() {
+        try {
+            const text = await navigator.clipboard.readText();
+            document.getElementById('m3u8-url').value = text;
+        } catch (err) {
+            showToast('เบราว์เซอร์ไม่อนุญาตให้อ่าน Clipboard', true);
+        }
+    }
+
+    function copyResult() {
+        const url = document.getElementById('result-url').value;
+        copyToClipboard(url);
+    }
+
+    let checkInterval;
+
+    async function startConversion() {
+        const series = document.getElementById('series-select').value;
+        const ep = document.getElementById('ep-name').value.trim();
+        const url = document.getElementById('m3u8-url').value.trim();
+        const btn = document.getElementById('convert-btn');
+        
+        if (!series || !ep || !url) {
+            showToast('กรุณากรอกข้อมูลให้ครบถ้วน', true);
+            return;
+        }
+
+        // UI Reset
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังเตรียมประมวลผล...';
+        btn.classList.add('opacity-70', 'cursor-not-allowed');
+        
+        document.getElementById('progress-container').classList.remove('hidden');
+        document.getElementById('result-container').classList.add('hidden');
+        document.getElementById('progress-bar').style.width = '0%';
+        document.getElementById('progress-percent').textContent = '0%';
+        
+        const spinner = document.getElementById('progress-spinner');
+        spinner.className = 'fa-solid fa-circle-notch fa-spin text-purple-400 text-xl';
+        
+        try {
+            const res = await fetch('/api/convert/video', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({series_name: series, ep_name: ep, url: url})
+            });
+            const data = await res.json();
+            
+            if (data.task_id) {
+                checkInterval = setInterval(() => checkStatus(data.task_id, btn), 1500);
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (e) {
+            showToast('เกิดข้อผิดพลาด: ' + e, true);
+            resetBtn(btn);
+        }
+    }
+
+    async function checkStatus(taskId, btn) {
+        try {
+            const res = await fetch(`/api/task/${taskId}`);
+            const data = await res.json();
+            
+            document.getElementById('progress-status').textContent = data.message;
+            document.getElementById('progress-percent').textContent = data.progress;
+            document.getElementById('progress-bar').style.width = data.progress;
+            
+            if (data.status === 'completed' || data.status === 'error') {
+                clearInterval(checkInterval);
+                resetBtn(btn);
+                
+                const spinner = document.getElementById('progress-spinner');
+                
+                if (data.status === 'completed') {
+                    spinner.className = 'fa-solid fa-check-circle text-emerald-400 text-xl';
+                    document.getElementById('result-container').classList.remove('hidden');
+                    document.getElementById('result-url').value = data.result_url;
+                    showToast('ประมวลผลวิดีโอสำเร็จ');
+                } else {
+                    spinner.className = 'fa-solid fa-circle-exclamation text-red-400 text-xl';
+                    showToast(data.message, true);
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+    
+    function resetBtn(btn) {
+        btn.disabled = false;
+        btn.classList.remove('opacity-70', 'cursor-not-allowed');
+        btn.innerHTML = '<i class="fa-solid fa-bolt"></i> เริ่มสร้างและแปลงไฟล์';
+    }
+</script>
+{% endblock %}

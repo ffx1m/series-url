@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mb-8">
+    <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">จัดการรูปภาพปก</h2>
+    <p class="text-slate-400">อัพโหลดและแปลงรูปภาพให้เป็นฟอร์แมต WebP อัตโนมัติเพื่อลดขนาดไฟล์</p>
+</div>
+
+<div class="glass-panel p-6 md:p-8 rounded-2xl relative overflow-hidden group max-w-2xl mx-auto">
+    <div class="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none group-hover:bg-emerald-500/20 transition-all"></div>
+    
+    <div class="space-y-6 relative z-10">
+        <!-- Search & Select Series -->
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">เลือกชื่อเรื่องซีรีส์ <span class="text-red-400">*</span></label>
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <i class="fa-solid fa-folder text-slate-500"></i>
+                </div>
+                <select id="series-select" class="w-full bg-slate-900/50 text-white border border-slate-700/50 rounded-xl pl-11 pr-10 py-3.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none transition-all">
+                    <option value="">กำลังโหลด...</option>
+                </select>
+                <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                    <i class="fa-solid fa-chevron-down text-slate-500 text-xs"></i>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Image Input Dropzone -->
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">อัพโหลดไฟล์รูปภาพ (JPG, PNG) <span class="text-red-400">*</span></label>
+            
+            <div class="relative group/dropzone">
+                <input type="file" id="image-file" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" onchange="previewFile()">
+                <div id="dropzone-ui" class="w-full bg-slate-900/40 border-2 border-dashed border-slate-600 rounded-2xl p-10 text-center transition-all group-hover/dropzone:border-emerald-500 group-hover/dropzone:bg-slate-900/60">
+                    <div id="upload-icon" class="bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400 group-hover/dropzone:text-emerald-400 group-hover/dropzone:scale-110 transition-all">
+                        <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+                    </div>
+                    <p id="upload-text" class="text-slate-300 font-medium mb-1">ลากไฟล์มาวาง หรือ คลิกเพื่อเลือกไฟล์</p>
+                    <p id="upload-hint" class="text-slate-500 text-sm">รองรับ JPG, PNG, WEBP ขนาดไม่เกิน 16MB</p>
+                    
+                    <div id="file-preview" class="hidden flex items-center justify-center gap-3 bg-slate-800/80 w-max mx-auto px-4 py-2 rounded-lg border border-slate-700 mt-2">
+                        <i class="fa-solid fa-file-image text-emerald-400"></i>
+                        <span id="file-name" class="text-slate-200 text-sm font-medium max-w-[200px] truncate">filename.jpg</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Button -->
+        <div class="pt-4">
+            <button onclick="startImageUpload()" id="upload-btn" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium py-4 rounded-xl transition-all shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 text-lg">
+                <i class="fa-solid fa-image"></i> อัพโหลดและแปลงเป็น WebP
+            </button>
+        </div>
+
+        <!-- Progress Section -->
+        <div id="progress-container" class="hidden bg-slate-900/60 p-5 rounded-2xl border border-white/5 shadow-inner mt-6">
+            <div class="flex justify-between items-end mb-3">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-circle-notch fa-spin text-emerald-400 text-xl" id="progress-spinner"></i>
+                    <span id="progress-status" class="text-slate-300 font-medium">กำลังเตรียมอัพโหลด...</span>
+                </div>
+                <span id="progress-percent" class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-400">0%</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner border border-slate-700/50">
+                <div id="progress-bar" class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500 ease-out" style="width: 0%"></div>
+            </div>
+            
+            <!-- Result URL -->
+            <div id="result-container" class="hidden mt-6 pt-6 border-t border-white/5">
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <input type="text" id="result-url" readonly class="w-full bg-slate-950 text-slate-300 border border-slate-700 rounded-xl pl-4 pr-4 py-3 text-sm focus:outline-none font-mono">
+                    <button onclick="copyResult()" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap">
+                        <i class="fa-solid fa-copy"></i> คัดลอก
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', loadSeries);
+
+    async function loadSeries() {
+        const select = document.getElementById('series-select');
+        try {
+            const data = await fetchSeriesOptions();
+            select.innerHTML = '<option value="">-- กรุณาเลือกซีรีส์ --</option>';
+            data.forEach(folder => {
+                select.innerHTML += `<option value="${folder}">${folder}</option>`;
+            });
+        } catch (e) {
+            select.innerHTML = '<option value="">โหลดข้อมูลล้มเหลว</option>';
+        }
+    }
+
+    function previewFile() {
+        const file = document.getElementById('image-file').files[0];
+        if (file) {
+            document.getElementById('upload-icon').classList.add('hidden');
+            document.getElementById('upload-text').classList.add('hidden');
+            document.getElementById('upload-hint').classList.add('hidden');
+            document.getElementById('file-preview').classList.remove('hidden');
+            document.getElementById('file-name').textContent = file.name;
+            document.getElementById('dropzone-ui').classList.add('border-emerald-500', 'bg-slate-900/60');
+        }
+    }
+
+    function copyResult() {
+        const url = document.getElementById('result-url').value;
+        copyToClipboard(url);
+    }
+
+    let checkInterval;
+
+    async function startImageUpload() {
+        const series = document.getElementById('series-select').value;
+        const fileInput = document.getElementById('image-file');
+        const btn = document.getElementById('upload-btn');
+        
+        if (!series || fileInput.files.length === 0) {
+            showToast('กรุณาเลือกซีรีส์และไฟล์รูปภาพ', true);
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('series_name', series);
+        formData.append('file', fileInput.files[0]);
+
+        // UI Reset
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังประมวลผล...';
+        btn.classList.add('opacity-70', 'cursor-not-allowed');
+        
+        document.getElementById('progress-container').classList.remove('hidden');
+        document.getElementById('result-container').classList.add('hidden');
+        document.getElementById('progress-bar').style.width = '10%';
+        document.getElementById('progress-percent').textContent = '10%';
+        document.getElementById('progress-status').textContent = 'กำลังอัพโหลดไปยังเซิร์ฟเวอร์...';
+        
+        const spinner = document.getElementById('progress-spinner');
+        spinner.className = 'fa-solid fa-circle-notch fa-spin text-emerald-400 text-xl';
+        
+        try {
+            const res = await fetch('/api/convert/image', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            
+            if (data.task_id) {
+                checkInterval = setInterval(() => checkStatus(data.task_id, btn), 1500);
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (e) {
+            showToast('เกิดข้อผิดพลาด: ' + e, true);
+            resetBtn(btn);
+        }
+    }
+
+    async function checkStatus(taskId, btn) {
+        try {
+            const res = await fetch(`/api/task/${taskId}`);
+            const data = await res.json();
+            
+            document.getElementById('progress-status').textContent = data.message;
+            document.getElementById('progress-percent').textContent = data.progress;
+            document.getElementById('progress-bar').style.width = data.progress;
+            
+            if (data.status === 'completed' || data.status === 'error') {
+                clearInterval(checkInterval);
+                resetBtn(btn);
+                
+                const spinner = document.getElementById('progress-spinner');
+                
+                if (data.status === 'completed') {
+                    spinner.className = 'fa-solid fa-check-circle text-emerald-400 text-xl';
+                    document.getElementById('result-container').classList.remove('hidden');
+                    document.getElementById('result-url').value = data.result_url;
+                    showToast('อัพโหลดรูปภาพสำเร็จ');
+                    
+                    // Reset file input
+                    document.getElementById('image-file').value = '';
+                    document.getElementById('upload-icon').classList.remove('hidden');
+                    document.getElementById('upload-text').classList.remove('hidden');
+                    document.getElementById('upload-hint').classList.remove('hidden');
+                    document.getElementById('file-preview').classList.add('hidden');
+                    document.getElementById('dropzone-ui').classList.remove('border-emerald-500', 'bg-slate-900/60');
+                } else {
+                    spinner.className = 'fa-solid fa-circle-exclamation text-red-400 text-xl';
+                    showToast(data.message, true);
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function resetBtn(btn) {
+        btn.disabled = false;
+        btn.classList.remove('opacity-70', 'cursor-not-allowed');
+        btn.innerHTML = '<i class="fa-solid fa-image"></i> อัพโหลดและแปลงเป็น WebP';
+    }
+</script>
+{% endblock %}

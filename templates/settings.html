@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mb-8">
+    <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">ตั้งค่าระบบ API</h2>
+    <p class="text-slate-400">เชื่อมต่อ Cloudflare R2 เพื่อเก็บและให้บริการไฟล์ต่างๆ</p>
+</div>
+
+<div class="glass-panel p-6 md:p-8 rounded-2xl max-w-2xl mx-auto border-t-4 border-t-blue-500 shadow-2xl relative overflow-hidden">
+    <!-- Decor bg -->
+    <div class="absolute top-0 right-0 w-40 h-40 bg-blue-500/10 rounded-bl-full -mr-10 -mt-10 pointer-events-none"></div>
+
+    {% if success %}
+    <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-5 py-4 rounded-xl mb-8 flex items-center shadow-inner">
+        <i class="fa-solid fa-check-circle text-xl mr-3"></i> 
+        <span class="font-medium">บันทึกการตั้งค่าลงในระบบเรียบร้อยแล้ว</span>
+    </div>
+    {% endif %}
+
+    <form method="POST" class="space-y-6 relative z-10">
+        
+        <div class="bg-slate-900/50 p-5 rounded-xl border border-white/5">
+            <h4 class="text-white font-medium mb-4 flex items-center gap-2">
+                <i class="fa-brands fa-cloudflare text-orange-500 text-lg"></i> ข้อมูล Cloudflare R2
+            </h4>
+            
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Account ID</label>
+                    <input type="text" name="cloudflare_account_id" value="{{ config.get('cloudflare_account_id', '') }}" required placeholder="e.g. 1a2b3c4d5e6f7g8h9i" class="w-full bg-slate-950 text-white border border-slate-700/50 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm transition-all">
+                    <p class="text-xs text-slate-500 mt-1.5 ml-1"><i class="fa-solid fa-circle-info mr-1"></i>หาได้จากเมนู R2 Overview ของ Cloudflare (อยู่ด้านขวา)</p>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Access Key ID</label>
+                        <input type="text" name="cloudflare_access_key" value="{{ config.get('cloudflare_access_key', '') }}" required class="w-full bg-slate-950 text-white border border-slate-700/50 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm transition-all">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Secret Access Key</label>
+                        <input type="password" name="cloudflare_secret_key" value="{{ config.get('cloudflare_secret_key', '') }}" required class="w-full bg-slate-950 text-white border border-slate-700/50 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm transition-all">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-slate-900/50 p-5 rounded-xl border border-white/5">
+            <h4 class="text-white font-medium mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-server text-blue-400 text-lg"></i> ข้อมูลพื้นที่เก็บข้อมูล
+            </h4>
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">ชื่อ Bucket (R2 Bucket Name)</label>
+                    <input type="text" name="r2_bucket_name" value="{{ config.get('r2_bucket_name', 'data-series') }}" required class="w-full bg-slate-950 text-white border border-slate-700/50 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm transition-all">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">โดเมนแสดงผล (Worker / Pages Domain)</label>
+                    <input type="url" name="worker_domain" value="{{ config.get('worker_domain', 'https://series.film01-thirx.workers.dev') }}" required placeholder="https://example.workers.dev" class="w-full bg-slate-950 text-white border border-slate-700/50 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm transition-all">
+                    <p class="text-xs text-slate-500 mt-1.5 ml-1"><i class="fa-solid fa-circle-info mr-1"></i>โดเมนที่คุณตั้งค่าเชื่อมกับ R2 ไว้สำหรับการเรียกดูไฟล์สาธารณะ</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="pt-4 flex justify-end">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-3.5 px-8 rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center gap-2">
+                <i class="fa-solid fa-save"></i> บันทึกการตั้งค่า
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
