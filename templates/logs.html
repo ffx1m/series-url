@@ -86,7 +86,7 @@
 
     function renderTaskList(tasks) {
         const container = document.getElementById('task-list');
-        const taskIds = Object.keys(tasks).reverse();
+        const taskIds = Object.keys(tasks).reverse().filter(tid => tasks[tid].status === 'processing');
         
         if (taskIds.length === 0) {
             container.innerHTML = `<div class="text-slate-500 text-center py-10 bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">ไม่มีงานในระบบ</div>`;

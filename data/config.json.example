@@ -1,0 +1,8 @@
+{
+    "cloudflare_account_id": "YOUR_ACCOUNT_ID",
+    "cloudflare_access_key": "YOUR_ACCESS_KEY",
+    "cloudflare_secret_key": "YOUR_SECRET_KEY",
+    "cloudflare_api_token": "YOUR_API_TOKEN",
+    "r2_bucket_name": "YOUR_BUCKET_NAME",
+    "worker_domain": "YOUR_WORKER_DOMAIN"
+}

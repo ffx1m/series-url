@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mb-8">
+    <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">แดชบอร์ดสรุปผล</h2>
+    <p class="text-slate-400">ภาพรวมการใช้งานพื้นที่และสถิติจาก Cloudflare</p>
+</div>
+
+<!-- Stats Loading Spinner -->
+<div id="stats-loading" class="flex justify-center items-center py-12">
+    <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-4xl"></i>
+    <span class="ml-3 text-slate-300 font-medium text-lg">กำลังโหลดข้อมูลจาก Cloudflare...</span>
+</div>
+
+<!-- Stats Error -->
+<div id="stats-error" class="hidden bg-red-500/10 border border-red-500/30 text-red-400 px-5 py-4 rounded-xl mb-8 flex items-center shadow-inner">
+    <i class="fa-solid fa-circle-exclamation text-xl mr-3"></i> 
+    <span id="error-msg" class="font-medium">ไม่สามารถโหลดข้อมูลได้ โปรดตรวจสอบ API Token ในหน้าตั้งค่า</span>
+</div>
+
+<div id="stats-grid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    
+    <!-- Billing Banner (Spans all columns) -->
+    <div class="md:col-span-2 lg:col-span-4 glass-panel p-5 rounded-2xl border-l-4 border-l-amber-500 relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+        <div class="flex items-center gap-4 relative z-10">
+            <div class="bg-amber-500/20 p-3 rounded-xl">
+                <i class="fa-solid fa-file-invoice-dollar text-amber-400 text-xl"></i>
+            </div>
+            <div>
+                <h3 class="text-white font-medium text-lg">ข้อมูลบัญชีและการเรียกเก็บเงิน</h3>
+                <p id="billing-error" class="text-xs text-red-400 hidden mt-1"></p>
+            </div>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-4 relative z-10 w-full md:w-auto">
+            <div class="bg-slate-900/50 px-4 py-2.5 rounded-xl border border-white/5 flex-1 sm:flex-none">
+                <div class="text-xs text-slate-500 mb-1"><i class="fa-solid fa-calendar-check mr-1"></i>รอบบิลถัดไป</div>
+                <div id="val-next-bill" class="text-sm font-semibold text-slate-300">กำลังตรวจสอบ...</div>
+            </div>
+            <div class="bg-slate-900/50 px-4 py-2.5 rounded-xl border border-white/5 flex-1 sm:flex-none">
+                <div class="text-xs text-slate-500 mb-1"><i class="fa-solid fa-money-bill-wave mr-1"></i>ยอดชำระล่าสุด</div>
+                <div id="val-last-payment" class="text-sm font-semibold text-emerald-400">กำลังตรวจสอบ...</div>
+            </div>
+            <div class="bg-red-500/10 px-4 py-2.5 rounded-xl border border-red-500/20 flex-1 sm:flex-none">
+                <div class="text-xs text-red-400/80 mb-1"><i class="fa-solid fa-calculator mr-1"></i>ค่าใช้จ่ายส่วนเกินเดือนนี้</div>
+                <div id="val-est-overage" class="text-sm font-semibold text-red-400">+$0.00</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Card 1: Storage -->
+    <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="bg-blue-500/20 p-2.5 rounded-lg">
+                <i class="fa-solid fa-hard-drive text-blue-400"></i>
+            </div>
+            <h3 class="text-slate-300 font-medium text-sm">พื้นที่เก็บข้อมูล R2</h3>
+        </div>
+        <div>
+            <div class="flex items-end gap-1">
+                <span id="val-storage" class="text-2xl font-bold text-white tracking-tight">0</span>
+                <span class="text-slate-400 text-sm mb-1">/ 10 GB</span>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 overflow-hidden">
+                <div id="bar-storage" class="bg-blue-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between items-center mt-2">
+                <span id="cost-storage" class="text-xs text-slate-500 font-mono">+$0.00</span>
+                <span id="pct-storage" class="text-xs text-slate-400">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: R2 Uploads (Class A) -->
+    <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="bg-purple-500/20 p-2.5 rounded-lg">
+                <i class="fa-solid fa-cloud-arrow-up text-purple-400"></i>
+            </div>
+            <h3 class="text-slate-300 font-medium text-sm">R2 อัพโหลด (Class A)</h3>
+        </div>
+        <div>
+            <div class="flex items-end gap-1">
+                <span id="val-class-a" class="text-2xl font-bold text-white tracking-tight">0</span>
+                <span class="text-slate-400 text-sm mb-1">/ 1M</span>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 overflow-hidden">
+                <div id="bar-class-a" class="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between items-center mt-2">
+                <span id="cost-class-a" class="text-xs text-slate-500 font-mono">+$0.00</span>
+                <span id="pct-class-a" class="text-xs text-slate-400">0%</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Card 3: R2 Downloads (Class B) -->
+    <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="bg-emerald-500/20 p-2.5 rounded-lg">
+                <i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i>
+            </div>
+            <h3 class="text-slate-300 font-medium text-sm">R2 ดาวน์โหลด (Class B)</h3>
+        </div>
+        <div>
+            <div class="flex items-end gap-1">
+                <span id="val-class-b" class="text-2xl font-bold text-white tracking-tight">0</span>
+                <span class="text-slate-400 text-sm mb-1">/ 10M</span>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 overflow-hidden">
+                <div id="bar-class-b" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between items-center mt-2">
+                <span id="cost-class-b" class="text-xs text-slate-500 font-mono">+$0.00</span>
+                <span id="pct-class-b" class="text-xs text-slate-400">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 4: Worker Requests -->
+    <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
+        <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+                <div class="bg-orange-500/20 p-2.5 rounded-lg">
+                    <i class="fa-solid fa-bolt text-orange-400"></i>
+                </div>
+                <h3 class="text-slate-300 font-medium text-sm">Worker รันสคริปต์</h3>
+            </div>
+            <span id="worker-badge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400">FREE</span>
+        </div>
+        <div>
+            <div class="flex items-end gap-1">
+                <span id="val-worker" class="text-2xl font-bold text-white tracking-tight">0</span>
+                <span id="limit-worker" class="text-slate-400 text-sm mb-1">/ 100K</span>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 overflow-hidden">
+                <div id="bar-worker" class="bg-orange-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between items-center mt-2">
+                <span id="cost-worker" class="text-xs text-slate-500 font-mono">+$0.00</span>
+                <span id="pct-worker" class="text-xs text-slate-400">0%</span>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchStats();
+        fetchBilling();
+    });
+
+    function formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toLocaleString();
+    }
+
+    function updateCard(id, val, limit, cost) {
+        const pct = Math.min((val / limit) * 100, 100).toFixed(1);
+        
+        document.getElementById(`val-${id}`).textContent = typeof val === 'number' && val % 1 !== 0 ? val.toFixed(2) : formatNumber(val);
+        document.getElementById(`pct-${id}`).textContent = `${pct}%`;
+        
+        const bar = document.getElementById(`bar-${id}`);
+        bar.style.width = `${pct}%`;
+        
+        const costEl = document.getElementById(`cost-${id}`);
+        if (cost > 0) {
+            costEl.textContent = `+$${cost.toFixed(2)}`;
+            costEl.classList.remove('text-slate-500');
+            costEl.classList.add('text-red-400', 'font-bold');
+            bar.classList.replace('bg-blue-500', 'bg-red-500');
+            bar.classList.replace('bg-purple-500', 'bg-red-500');
+            bar.classList.replace('bg-emerald-500', 'bg-red-500');
+            bar.classList.replace('bg-orange-500', 'bg-red-500');
+        } else {
+            costEl.textContent = 'อยู่ในโควต้าฟรี';
+        }
+    }
+
+    async function fetchStats() {
+        try {
+            const response = await fetch('/api/stats');
+            const data = await response.json();
+            
+            document.getElementById('stats-loading').classList.add('hidden');
+            
+            if (data.error) {
+                document.getElementById('stats-error').classList.remove('hidden');
+                document.getElementById('error-msg').textContent = data.error;
+            } else {
+                document.getElementById('stats-grid').classList.remove('hidden');
+                
+                // Storage
+                updateCard('storage', data.storage_gb, data.storage_limit, data.storage_cost);
+                
+                // Class A
+                updateCard('class-a', data.r2_class_a, data.class_a_limit, data.class_a_cost);
+                
+                // Class B
+                updateCard('class-b', data.r2_class_b, data.class_b_limit, data.class_b_cost);
+                
+                // Workers
+                const workerLimitStr = data.worker_limit >= 1000000 ? (data.worker_limit/1000000) + 'M' : (data.worker_limit/1000) + 'K';
+                document.getElementById('limit-worker').textContent = `/ ${workerLimitStr}`;
+                
+                const badge = document.getElementById('worker-badge');
+                if (data.worker_plan === 'PAID') {
+                    badge.textContent = '👑 PAID';
+                    badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                }
+                
+                updateCard('worker', data.worker_requests, data.worker_limit, data.worker_cost);
+                
+                // Total Estimated Overage
+                document.getElementById('val-est-overage').textContent = `+$${data.total_est_overage.toFixed(2)}`;
+            }
+        } catch (e) {
+            document.getElementById('stats-loading').classList.add('hidden');
+            document.getElementById('stats-error').classList.remove('hidden');
+            document.getElementById('error-msg').textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์';
+        }
+    }
+
+    async function fetchBilling() {
+        try {
+            const response = await fetch('/api/billing');
+            const data = await response.json();
+            
+            if (data.error) {
+                const errEl = document.getElementById('billing-error');
+                errEl.textContent = data.error;
+                errEl.classList.remove('hidden');
+            } else {
+                document.getElementById('val-next-bill').textContent = data.next_billing_date;
+                document.getElementById('val-last-payment').textContent = data.last_payment;
+            }
+        } catch (e) {
+            console.error('Failed to fetch billing:', e);
+        }
+    }
+</script>
+{% endblock %}

@@ -7,6 +7,7 @@ from utils.r2 import (
     delete_object, delete_ep_folder, delete_series_folder, load_config, save_config
 )
 from utils.ffmpeg import start_video_conversion, start_image_conversion, get_task_status, get_all_tasks
+from utils.cloudflare import get_cloudflare_stats, get_cloudflare_billing
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'data/uploads'
@@ -15,8 +16,12 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('data', exist_ok=True)
 
 @app.route('/')
-def index():
-    return render_template('index.html')
+def dashboard_page():
+    return render_template('dashboard.html')
+
+@app.route('/video')
+def video_page():
+    return render_template('video.html')
 
 @app.route('/image')
 def image_page():
@@ -37,6 +42,7 @@ def settings_page():
             'cloudflare_account_id': request.form.get('cloudflare_account_id'),
             'cloudflare_access_key': request.form.get('cloudflare_access_key'),
             'cloudflare_secret_key': request.form.get('cloudflare_secret_key'),
+            'cloudflare_api_token': request.form.get('cloudflare_api_token'),
             'r2_bucket_name': request.form.get('r2_bucket_name', 'data-series'),
             'worker_domain': request.form.get('worker_domain', 'https://series.film01-thirx.workers.dev')
         }
@@ -135,6 +141,16 @@ def delete_series():
     if delete_series_folder(series_name):
         return jsonify({'message': 'Deleted successfully'})
     return jsonify({'error': 'Failed to delete'}), 500
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    stats = get_cloudflare_stats()
+    return jsonify(stats)
+
+@app.route('/api/billing', methods=['GET'])
+def get_billing():
+    billing = get_cloudflare_billing()
+    return jsonify(billing)
 
 if __name__ == '__main__':
     app.run(debug=True, port=10000)

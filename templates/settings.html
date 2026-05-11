@@ -26,6 +26,12 @@
             
             <div class="space-y-5">
                 <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">API Token (สำหรับการอ่านสถิติ)</label>
+                    <input type="password" name="cloudflare_api_token" value="{{ config.get('cloudflare_api_token', '') }}" placeholder="Token ที่มีสิทธิ์ Account Analytics: Read" class="w-full bg-slate-950 text-white border border-slate-700/50 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm transition-all">
+                    <p class="text-xs text-slate-500 mt-1.5 ml-1"><i class="fa-solid fa-circle-info mr-1"></i>ใช้สำหรับดึงสถิติ Dashboard (ต้องมีสิทธิ์ Account Analytics: Read)</p>
+                </div>
+                
+                <div>
                     <label class="block text-sm font-medium text-slate-300 mb-1">Account ID</label>
                     <input type="text" name="cloudflare_account_id" value="{{ config.get('cloudflare_account_id', '') }}" required placeholder="e.g. 1a2b3c4d5e6f7g8h9i" class="w-full bg-slate-950 text-white border border-slate-700/50 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm transition-all">
                     <p class="text-xs text-slate-500 mt-1.5 ml-1"><i class="fa-solid fa-circle-info mr-1"></i>หาได้จากเมนู R2 Overview ของ Cloudflare (อยู่ด้านขวา)</p>
