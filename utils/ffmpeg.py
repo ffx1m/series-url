@@ -52,10 +52,22 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
         
         cmd = [
             'ffmpeg', '-y', '-i', m3u8_url,
-            '-c', 'copy',
-            '-f', 'hls',
-            '-hls_time', '6',
-            '-hls_list_size', '0',
+            '-c:v', 'libx264',
+            '-preset', 'medium',
+            '-crf', '22',
+            '-vf', "scale='min(540,iw)':-2",
+            '-c:a', 'aac',
+            '-b:a', '96k',
+            '-ar', '48000',
+            '-g', '72',
+            '-keyint_min', '72',
+            '-sc_threshold', '0',
+            '-hls_time', '3',
+            '-hls_playlist_type', 'vod',
+            '-hls_flags', 'independent_segments',
+            '-hls_segment_type', 'mpegts',
+            '-hls_segment_filename', os.path.join(tmp_dir, "segment_%03d.ts"),
+            '-start_number', '0',
             output_m3u8
         ]
         
