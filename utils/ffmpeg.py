@@ -33,7 +33,14 @@ def time_to_seconds(time_str):
 
 def start_video_conversion(series_name, ep_name, m3u8_url):
     task_id = str(uuid.uuid4())
-    tasks[task_id] = {'status': 'processing', 'progress': '0%', 'message': 'กำลังดึงข้อมูลความยาววิดีโอ...', 'type': 'video'}
+    tasks[task_id] = {
+        'status': 'processing', 
+        'progress': '0%', 
+        'message': 'กำลังดึงข้อมูลความยาววิดีโอ...', 
+        'type': 'video',
+        'logs': [],
+        'name': f"{series_name} - {ep_name}"
+    }
     
     thread = threading.Thread(target=_process_video_task, args=(task_id, series_name, ep_name, m3u8_url))
     thread.start()
@@ -76,20 +83,32 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
         # Regex to find time=HH:MM:SS.ms
         time_regex = re.compile(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})")
         
+        current_progress_val = 0
+        
         for line in process.stdout:
+            # Store logs
+            tasks[task_id]['logs'].append(line.strip())
+            if len(tasks[task_id]['logs']) > 100:
+                tasks[task_id]['logs'].pop(0)
+
             match = time_regex.search(line)
             if match and total_duration > 0:
                 current_time = time_to_seconds(match.group(1))
                 percent = min(100, int((current_time / total_duration) * 100))
                 # FFmpeg phase represents 50% of the total task
                 overall_percent = int(percent / 2)
-                tasks[task_id]['progress'] = f"{overall_percent}%"
-                tasks[task_id]['message'] = f"กำลังแปลงไฟล์วิดีโอ... ({percent}%)"
+                
+                # Prevent progress from going backwards
+                if overall_percent > current_progress_val:
+                    current_progress_val = overall_percent
+                    tasks[task_id]['progress'] = f"{current_progress_val}%"
+                    tasks[task_id]['message'] = f"กำลังแปลงไฟล์วิดีโอ... ({percent}%)"
             elif 'frame=' in line:
-                # Fallback if no duration but we see frames processing
-                if tasks[task_id]['progress'] == '0%':
-                    tasks[task_id]['progress'] = '25%'
-                    tasks[task_id]['message'] = 'กำลังดึงข้อมูลและแปลงวิดีโออย่างต่อเนื่อง...'
+                # Fallback if no duration: start at 5% and stay until actual progress takes over
+                if current_progress_val < 5:
+                    current_progress_val = 5
+                    tasks[task_id]['progress'] = '5%'
+                    tasks[task_id]['message'] = 'กำลังดึงข้อมูลและเริ่มการแปลงวิดีโอ...'
         
         process.wait()
         
@@ -101,6 +120,7 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
             
         tasks[task_id]['message'] = 'กำลังอัพโหลดไฟล์ขึ้นสู่ Cloudflare R2...'
         tasks[task_id]['progress'] = '50%'
+        tasks[task_id]['logs'].append("Starting upload to R2...")
         
         # Upload files in tmp_dir to R2
         files_to_upload = [f for f in os.listdir(tmp_dir) if f.endswith('.ts') or f.endswith('.m3u8')]
@@ -118,6 +138,8 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
             content_type = 'application/vnd.apple.mpegurl' if filename.endswith('.m3u8') else 'video/MP2T'
             
             upload_file_to_r2(local_path, s3_key, content_type=content_type)
+            tasks[task_id]['logs'].append(f"Uploaded: {filename}")
+            if len(tasks[task_id]['logs']) > 100: tasks[task_id]['logs'].pop(0)
             
             # Upload phase represents 50% to 100%
             percent = 50 + int(((idx + 1) / total_files) * 50)
@@ -135,15 +157,24 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
         tasks[task_id]['progress'] = '100%'
         tasks[task_id]['message'] = 'เสร็จสิ้นกระบวนการทั้งหมด!'
         tasks[task_id]['result_url'] = final_url
+        tasks[task_id]['logs'].append("Task completed successfully.")
         
     except Exception as e:
         tasks[task_id]['status'] = 'error'
         tasks[task_id]['message'] = str(e)
+        tasks[task_id]['logs'].append(f"Error: {str(e)}")
 
 
 def start_image_conversion(series_name, input_image_path):
     task_id = str(uuid.uuid4())
-    tasks[task_id] = {'status': 'processing', 'progress': '10%', 'message': 'กำลังเริ่มแปลงรูปภาพ...', 'type': 'image'}
+    tasks[task_id] = {
+        'status': 'processing', 
+        'progress': '10%', 
+        'message': 'กำลังเริ่มแปลงรูปภาพ...', 
+        'type': 'image',
+        'logs': [],
+        'name': f"Image for {series_name}"
+    }
     
     thread = threading.Thread(target=_process_image_task, args=(task_id, series_name, input_image_path))
     thread.start()
@@ -165,7 +196,11 @@ def _process_image_task(task_id, series_name, input_image_path):
             output_webp
         ]
         
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        for line in process.stdout:
+            tasks[task_id]['logs'].append(line.strip())
+            if len(tasks[task_id]['logs']) > 100: tasks[task_id]['logs'].pop(0)
+        
         process.wait()
         
         if process.returncode != 0:
@@ -180,6 +215,7 @@ def _process_image_task(task_id, series_name, input_image_path):
         s3_key = f"series/{series_name}/{filename}"
         
         upload_success = upload_file_to_r2(output_webp, s3_key, content_type='image/webp')
+        tasks[task_id]['logs'].append(f"Uploaded to R2: {s3_key}")
         
         # Cleanup
         try: os.remove(input_image_path)
@@ -200,10 +236,15 @@ def _process_image_task(task_id, series_name, input_image_path):
         tasks[task_id]['progress'] = '100%'
         tasks[task_id]['message'] = 'อัพโหลดและแปลงรูปภาพสำเร็จ!'
         tasks[task_id]['result_url'] = final_url
+        tasks[task_id]['logs'].append("Task completed successfully.")
         
     except Exception as e:
         tasks[task_id]['status'] = 'error'
         tasks[task_id]['message'] = str(e)
+        tasks[task_id]['logs'].append(f"Error: {str(e)}")
 
 def get_task_status(task_id):
     return tasks.get(task_id, {'status': 'not_found'})
+
+def get_all_tasks():
+    return tasks

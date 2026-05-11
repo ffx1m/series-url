@@ -6,7 +6,7 @@ from utils.r2 import (
     list_series_folders, create_series_folder, list_folder_contents,
     delete_object, delete_ep_folder, delete_series_folder, load_config, save_config
 )
-from utils.ffmpeg import start_video_conversion, start_image_conversion, get_task_status
+from utils.ffmpeg import start_video_conversion, start_image_conversion, get_task_status, get_all_tasks
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'data/uploads'
@@ -25,6 +25,10 @@ def image_page():
 @app.route('/manage')
 def manage_page():
     return render_template('manage.html')
+
+@app.route('/logs')
+def logs_page():
+    return render_template('logs.html')
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings_page():
@@ -94,6 +98,11 @@ def convert_image():
 def task_status(task_id):
     status = get_task_status(task_id)
     return jsonify(status)
+
+@app.route('/api/tasks', methods=['GET'])
+def all_tasks():
+    tasks = get_all_tasks()
+    return jsonify(tasks)
 
 @app.route('/api/series/<series_name>', methods=['GET'])
 def series_contents(series_name):

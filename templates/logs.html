@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">ระบบ Logs</h2>
+        <p class="text-slate-400">ติดตามการทำงานของ FFmpeg และการอัพโหลดแบบ Real-time</p>
+    </div>
+    <div class="bg-slate-800/50 px-4 py-2 rounded-xl border border-white/5 flex items-center gap-3">
+        <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+        <span class="text-sm font-medium text-slate-300">Live Status</span>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Task List -->
+    <div class="lg:col-span-1 space-y-4">
+        <h3 class="text-lg font-semibold text-white px-2 flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-blue-400"></i> รายการงานทั้งหมด
+        </h3>
+        <div id="task-list" class="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+            <!-- Tasks will be injected here -->
+            <div class="text-slate-500 text-center py-10 bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">
+                ไม่มีงานที่กำลังดำเนินการ
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Detail -->
+    <div class="lg:col-span-2 space-y-4">
+        <h3 class="text-lg font-semibold text-white px-2 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-purple-400"></i> FFmpeg Output
+            </div>
+            <button onclick="clearLogs()" class="text-xs font-normal text-slate-500 hover:text-slate-300 transition-colors">
+                <i class="fa-solid fa-trash-can mr-1"></i> เคลียร์หน้าจอ
+            </button>
+        </h3>
+        <div class="glass-panel rounded-2xl overflow-hidden border border-white/5 flex flex-col h-[600px]">
+            <div id="log-header" class="bg-slate-900/80 px-5 py-3 border-b border-white/5 flex justify-between items-center">
+                <span id="active-task-name" class="text-sm font-mono text-blue-400">กรุณาเลือกงานจากรายการด้านซ้าย</span>
+                <span id="active-task-status" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">-</span>
+            </div>
+            <div id="log-content" class="flex-1 bg-black/40 p-5 font-mono text-xs sm:text-sm text-slate-300 overflow-y-auto custom-scrollbar leading-relaxed">
+                <!-- Log lines will be injected here -->
+                <div class="text-slate-600 italic">Select a task to view real-time logs...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    
+    .log-line { border-left: 2px solid transparent; padding-left: 12px; margin-bottom: 4px; transition: all 0.2s; }
+    .log-line:hover { background: rgba(255,255,255,0.03); border-left-color: #3b82f6; }
+    .log-error { color: #f87171; }
+    .log-success { color: #34d399; }
+    .log-info { color: #60a5fa; }
+</style>
+
+<script>
+    let activeTaskId = null;
+    let tasksData = {};
+
+    document.addEventListener('DOMContentLoaded', () => {
+        updateTasks();
+        setInterval(updateTasks, 2000);
+    });
+
+    async function updateTasks() {
+        try {
+            const res = await fetch('/api/tasks');
+            const data = await res.json();
+            tasksData = data;
+            renderTaskList(data);
+            if (activeTaskId && data[activeTaskId]) {
+                renderLogs(data[activeTaskId]);
+            }
+        } catch (e) {
+            console.error('Failed to update tasks:', e);
+        }
+    }
+
+    function renderTaskList(tasks) {
+        const container = document.getElementById('task-list');
+        const taskIds = Object.keys(tasks).reverse();
+        
+        if (taskIds.length === 0) {
+            container.innerHTML = `<div class="text-slate-500 text-center py-10 bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">ไม่มีงานในระบบ</div>`;
+            return;
+        }
+
+        let html = '';
+        taskIds.forEach(tid => {
+            const task = tasks[tid];
+            const isActive = tid === activeTaskId;
+            const statusColor = task.status === 'completed' ? 'bg-emerald-500' : 
+                              task.status === 'error' ? 'bg-red-500' : 'bg-blue-500';
+            
+            html += `
+                <div onclick="selectTask('${tid}')" class="glass-panel p-4 rounded-xl border ${isActive ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'} cursor-pointer hover:border-white/20 transition-all group">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-medium text-slate-200 group-hover:text-white transition-colors truncate max-w-[150px]">${task.name || tid.slice(0,8)}</h4>
+                        <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded ${statusColor} text-white">${task.status}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full ${statusColor} transition-all duration-500" style="width: ${task.progress}"></div>
+                        </div>
+                        <span class="text-xs font-bold text-slate-400">${task.progress}</span>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+        
+        // Auto select first task if none selected
+        if (!activeTaskId && taskIds.length > 0) {
+            selectTask(taskIds[0]);
+        }
+    }
+
+    function selectTask(tid) {
+        activeTaskId = tid;
+        const task = tasksData[tid];
+        if (task) {
+            document.getElementById('active-task-name').textContent = `Task: ${task.name || tid}`;
+            document.getElementById('active-task-status').textContent = task.status.toUpperCase();
+            document.getElementById('active-task-status').className = `text-[10px] px-2 py-0.5 rounded-full ${task.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`;
+            renderLogs(task, true);
+        }
+        updateTasks(); // refresh UI
+    }
+
+    function renderLogs(task, forceScroll = false) {
+        const container = document.getElementById('log-content');
+        const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+        
+        if (!task.logs || task.logs.length === 0) {
+            container.innerHTML = `<div class="text-slate-600 italic">No logs available for this task.</div>`;
+            return;
+        }
+
+        let html = '';
+        task.logs.forEach(line => {
+            let typeClass = '';
+            if (line.toLowerCase().includes('error')) typeClass = 'log-error';
+            else if (line.toLowerCase().includes('successfully') || line.toLowerCase().includes('completed')) typeClass = 'log-success';
+            else if (line.toLowerCase().includes('starting') || line.toLowerCase().includes('uploaded')) typeClass = 'log-info';
+            
+            html += `<div class="log-line ${typeClass}">${line}</div>`;
+        });
+        
+        container.innerHTML = html;
+        
+        if (forceScroll || wasAtBottom) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+
+    function clearLogs() {
+        if (activeTaskId && tasksData[activeTaskId]) {
+            tasksData[activeTaskId].logs = [];
+            renderLogs(tasksData[activeTaskId]);
+        }
+    }
+</script>
+{% endblock %}

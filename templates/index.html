@@ -136,7 +136,23 @@
 </style>
 
 <script>
-    document.addEventListener('DOMContentLoaded', loadSeries);
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSeries();
+        resumeTask();
+    });
+
+    async function resumeTask() {
+        const taskId = localStorage.getItem('video_task_id');
+
+        if (taskId) {
+            const btn = document.getElementById('convert-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังดำเนินการต่อ...';
+            btn.classList.add('opacity-70', 'cursor-not-allowed');
+            document.getElementById('progress-container').classList.remove('hidden');
+            checkInterval = setInterval(() => checkStatus(taskId, btn), 1500);
+        }
+    }
 
     async function loadSeries() {
         const select = document.getElementById('series-select');
