@@ -228,6 +228,7 @@
             const data = await res.json();
             
             if (data.task_id) {
+                localStorage.setItem('video_task_id', data.task_id);
                 checkInterval = setInterval(() => checkStatus(data.task_id, btn), 1500);
             } else {
                 throw new Error(data.error);
@@ -243,12 +244,22 @@
             const res = await fetch(`/api/task/${taskId}`);
             const data = await res.json();
             
+            // Handle task not found (e.g. server restarted and memory cleared)
+            if (data.status === 'not_found') {
+                clearInterval(checkInterval);
+                localStorage.removeItem('video_task_id');
+                resetBtn(btn);
+                document.getElementById('progress-container').classList.add('hidden');
+                return;
+            }
+
             document.getElementById('progress-status').textContent = data.message;
             document.getElementById('progress-percent').textContent = data.progress;
             document.getElementById('progress-bar').style.width = data.progress;
             
             if (data.status === 'completed' || data.status === 'error') {
                 clearInterval(checkInterval);
+                localStorage.removeItem('video_task_id');
                 resetBtn(btn);
                 
                 const spinner = document.getElementById('progress-spinner');
