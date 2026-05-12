@@ -6,7 +6,7 @@
         <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">แดชบอร์ดสรุปผล</h2>
         <p class="text-slate-400">ภาพรวมการใช้งานพื้นที่และสถิติจาก Cloudflare</p>
     </div>
-    <button onclick="fetchAll()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl border border-white/5 transition-all flex items-center gap-2 text-sm">
+    <button onclick="location.reload()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl border border-white/5 transition-all flex items-center gap-2 text-sm">
         <i class="fa-solid fa-rotate"></i> อัปเดตข้อมูล
     </button>
 </div>
@@ -14,13 +14,13 @@
 <!-- Stats Loading Spinner -->
 <div id="stats-loading" class="flex justify-center items-center py-12">
     <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-4xl"></i>
-    <span class="ml-3 text-slate-300 font-medium text-lg">กำลังโหลดข้อมูลจาก Cloudflare...</span>
+    <span class="ml-3 text-slate-300 font-medium text-lg">กำลังโหลดข้อมูล...</span>
 </div>
 
 <!-- Stats Error -->
 <div id="stats-error" class="hidden bg-red-500/10 border border-red-500/30 text-red-400 px-5 py-4 rounded-xl mb-8 flex items-center shadow-inner">
     <i class="fa-solid fa-circle-exclamation text-xl mr-3"></i> 
-    <span id="error-msg" class="font-medium">ไม่สามารถโหลดข้อมูลได้ โปรดตรวจสอบ API Token ในหน้าตั้งค่า</span>
+    <span id="error-msg" class="font-medium">ไม่สามารถโหลดข้อมูลได้</span>
 </div>
 
 <div id="dashboard-content" class="hidden space-y-10">
@@ -33,20 +33,20 @@
                 <i class="fa-solid fa-file-invoice-dollar text-amber-400 text-xl"></i>
             </div>
             <div>
-                <h3 class="text-white font-bold text-lg">การเรียกเก็บเงินสะสม</h3>
+                <h3 class="text-white font-bold text-lg">ข้อมูลการเรียกเก็บเงิน</h3>
                 <p id="billing-error" class="text-[10px] text-red-400 hidden mt-1 italic"></p>
             </div>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-10 w-full md:w-auto flex-1 md:max-w-2xl">
-            <div class="bg-slate-900/50 px-4 py-3 rounded-xl border border-white/5">
+            <div class="bg-slate-900/50 px-4 py-3 rounded-xl border border-white/5 text-center sm:text-left">
                 <div class="text-[10px] text-slate-500 mb-1 uppercase font-bold tracking-wider">รอบบิลถัดไป</div>
                 <div id="val-next-bill" class="text-sm font-semibold text-slate-200">-</div>
             </div>
-            <div class="bg-slate-900/50 px-4 py-3 rounded-xl border border-white/5">
+            <div class="bg-slate-900/50 px-4 py-3 rounded-xl border border-white/5 text-center sm:text-left">
                 <div class="text-[10px] text-slate-500 mb-1 uppercase font-bold tracking-wider">ยอดจ่ายล่าสุด</div>
                 <div id="val-last-payment" class="text-sm font-semibold text-emerald-400">-</div>
             </div>
-            <div class="bg-red-500/10 px-4 py-3 rounded-xl border border-red-500/20">
+            <div class="bg-red-500/10 px-4 py-3 rounded-xl border border-red-500/20 text-center sm:text-left">
                 <div class="text-[10px] text-red-400 mb-1 uppercase font-bold tracking-wider">ส่วนเกินเดือนนี้</div>
                 <div id="val-total-overage" class="text-sm font-bold text-red-400">$0.00</div>
             </div>
@@ -57,63 +57,63 @@
     <div class="space-y-4">
         <div class="flex items-center gap-2 px-1 text-slate-400">
             <i class="fa-solid fa-box-open"></i>
-            <h3 class="text-sm font-bold uppercase tracking-widest">Cloudflare R2 Storage</h3>
+            <h3 class="text-xs font-bold uppercase tracking-[0.2em]">Cloudflare R2 Storage</h3>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <!-- R2 Storage -->
             <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="bg-blue-500/20 p-2 rounded-lg text-blue-400"><i class="fa-solid fa-database"></i></div>
-                    <h4 class="text-slate-300 font-medium text-sm">พื้นที่เก็บข้อมูล</h4>
+                <div class="flex items-center gap-3 mb-4 text-blue-400">
+                    <i class="fa-solid fa-database"></i>
+                    <h4 class="text-slate-300 font-medium text-xs">พื้นที่เก็บข้อมูล</h4>
                 </div>
                 <div class="flex items-end gap-1 mb-3">
-                    <span id="r2-val-storage" class="text-3xl font-bold text-white tracking-tight">0</span>
+                    <span id="val-storage" class="text-3xl font-bold text-white tracking-tight">0</span>
                     <span class="text-slate-500 text-sm mb-1">/ 10 GB</span>
                 </div>
                 <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                    <div id="r2-bar-storage" class="bg-blue-500 h-full transition-all duration-700" style="width: 0%"></div>
+                    <div id="bar-storage" class="bg-blue-500 h-full transition-all duration-700" style="width: 0%"></div>
                 </div>
                 <div class="flex justify-between items-center mt-3 text-[10px]">
-                    <span id="r2-cost-storage" class="text-slate-500 font-mono">+$0.00</span>
-                    <span id="r2-pct-storage" class="text-slate-400 font-bold">0%</span>
+                    <span id="cost-storage" class="text-slate-500 font-mono">+$0.00</span>
+                    <span id="pct-storage" class="text-slate-400 font-bold">0%</span>
                 </div>
             </div>
 
             <!-- R2 Class A -->
             <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="bg-purple-500/20 p-2 rounded-lg text-purple-400"><i class="fa-solid fa-pen-to-square"></i></div>
-                    <h4 class="text-slate-300 font-medium text-sm">อัพโหลด (Class A)</h4>
+                <div class="flex items-center gap-3 mb-4 text-purple-400">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <h4 class="text-slate-300 font-medium text-xs">อัพโหลด (Class A)</h4>
                 </div>
                 <div class="flex items-end gap-1 mb-3">
-                    <span id="r2-val-class-a" class="text-3xl font-bold text-white tracking-tight">0</span>
+                    <span id="val-class-a" class="text-3xl font-bold text-white tracking-tight">0</span>
                     <span class="text-slate-500 text-sm mb-1">/ 1M</span>
                 </div>
                 <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                    <div id="r2-bar-class-a" class="bg-purple-500 h-full transition-all duration-700" style="width: 0%"></div>
+                    <div id="bar-class-a" class="bg-purple-500 h-full transition-all duration-700" style="width: 0%"></div>
                 </div>
                 <div class="flex justify-between items-center mt-3 text-[10px]">
-                    <span id="r2-cost-class-a" class="text-slate-500 font-mono">+$0.00</span>
-                    <span id="r2-pct-class-a" class="text-slate-400 font-bold">0%</span>
+                    <span id="cost-class-a" class="text-slate-500 font-mono">+$0.00</span>
+                    <span id="pct-class-a" class="text-slate-400 font-bold">0%</span>
                 </div>
             </div>
 
             <!-- R2 Class B -->
             <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="bg-emerald-500/20 p-2 rounded-lg text-emerald-400"><i class="fa-solid fa-eye"></i></div>
-                    <h4 class="text-slate-300 font-medium text-sm">ดาวน์โหลด (Class B)</h4>
+                <div class="flex items-center gap-3 mb-4 text-emerald-400">
+                    <i class="fa-solid fa-cloud-arrow-down"></i>
+                    <h4 class="text-slate-300 font-medium text-xs">ดาวน์โหลด (Class B)</h4>
                 </div>
                 <div class="flex items-end gap-1 mb-3">
-                    <span id="r2-val-class-b" class="text-3xl font-bold text-white tracking-tight">0</span>
+                    <span id="val-class-b" class="text-3xl font-bold text-white tracking-tight">0</span>
                     <span class="text-slate-500 text-sm mb-1">/ 10M</span>
                 </div>
                 <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                    <div id="r2-bar-class-b" class="bg-emerald-500 h-full transition-all duration-700" style="width: 0%"></div>
+                    <div id="bar-class-b" class="bg-emerald-500 h-full transition-all duration-700" style="width: 0%"></div>
                 </div>
                 <div class="flex justify-between items-center mt-3 text-[10px]">
-                    <span id="r2-cost-class-b" class="text-slate-500 font-mono">+$0.00</span>
-                    <span id="r2-pct-class-b" class="text-slate-400 font-bold">0%</span>
+                    <span id="cost-class-b" class="text-slate-500 font-mono">+$0.00</span>
+                    <span id="pct-class-b" class="text-slate-400 font-bold">0%</span>
                 </div>
             </div>
         </div>
@@ -124,49 +124,32 @@
         <div class="flex items-center justify-between px-1">
             <div class="flex items-center gap-2 text-slate-400">
                 <i class="fa-solid fa-bolt"></i>
-                <h3 class="text-sm font-bold uppercase tracking-widest">Workers & Pages Compute</h3>
+                <h3 class="text-xs font-bold uppercase tracking-[0.2em]">Workers & Pages Compute</h3>
             </div>
             <span id="worker-badge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-500">FREE</span>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Worker Requests -->
-            <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group">
-                <div id="worker-label" class="text-[10px] text-slate-500 mb-2 uppercase font-bold tracking-wider">DAILY INVOCATIONS</div>
-                <div class="flex items-end gap-1 mb-4">
-                    <span id="wk-val-requests" class="text-4xl font-bold text-white tracking-tight">0</span>
-                    <span id="wk-limit-requests" class="text-slate-500 text-sm mb-1">/ 100K</span>
-                </div>
-                <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div id="wk-bar-requests" class="bg-orange-500 h-full transition-all duration-1000" style="width: 0%"></div>
-                </div>
-                <div class="flex justify-between items-center mt-4 text-xs">
-                    <span id="wk-cost-requests" class="text-slate-500 font-mono font-medium tracking-tight">อยู่ในโควต้าฟรี</span>
-                    <span id="wk-pct-requests" class="text-slate-400 font-bold">0%</span>
-                </div>
-            </div>
-
-            <!-- CPU Time -->
-            <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group">
-                <div class="flex justify-between items-start mb-2">
-                    <div id="cpu-label" class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">AVERAGE CPU TIME</div>
-                    <div id="avg-cpu-tag" class="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded font-mono hidden">0.00 ms avg</div>
-                </div>
-                <div id="cpu-container-accum" class="hidden">
-                    <div class="flex items-end gap-1 mb-4">
-                        <span id="wk-val-cpu" class="text-4xl font-bold text-white tracking-tight">0</span>
-                        <span class="text-slate-500 text-sm mb-1">/ 30M ms</span>
+            <!-- Worker Requests (Large Card) -->
+            <div class="md:col-span-2 glass-panel p-6 rounded-2xl relative overflow-hidden group">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div class="flex-1">
+                        <div id="worker-period" class="text-[10px] text-slate-500 mb-2 uppercase font-bold tracking-widest">DAILY INVOCATIONS</div>
+                        <div class="flex items-end gap-1 mb-4">
+                            <span id="val-worker" class="text-5xl font-bold text-white tracking-tight">0</span>
+                            <span id="limit-worker" class="text-slate-500 text-lg mb-1.5">/ 100K</span>
+                        </div>
+                        <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                            <div id="bar-worker" class="bg-orange-500 h-full transition-all duration-1000 shadow-[0_0_15px_rgba(249,115,22,0.3)]" style="width: 0%"></div>
+                        </div>
+                        <div class="flex justify-between items-center mt-4 text-sm">
+                            <span id="cost-worker" class="text-slate-500 font-mono font-medium">อยู่ในโควต้าฟรี</span>
+                            <span id="pct-worker" class="text-slate-400 font-bold">0%</span>
+                        </div>
                     </div>
-                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                        <div id="wk-bar-cpu" class="bg-blue-400 h-full transition-all duration-1000" style="width: 0%"></div>
+                    <!-- Decorative Icon for Worker Section -->
+                    <div class="hidden md:flex bg-orange-500/5 w-24 h-24 rounded-3xl items-center justify-center border border-orange-500/10">
+                        <i class="fa-solid fa-microchip text-4xl text-orange-500/20"></i>
                     </div>
-                </div>
-                <div id="cpu-container-limit" class="flex flex-col justify-center items-start h-20">
-                    <div class="text-3xl font-bold text-white tracking-tight mb-1">10 ms <span class="text-sm text-slate-500 font-normal">limit</span></div>
-                    <p class="text-[11px] text-slate-500 leading-tight">ขีดจำกัดต่อการเรียกใช้งาน (Per Request)<br>สำหรับแผนการใช้งานปัจจุบัน</p>
-                </div>
-                <div class="flex justify-between items-center mt-4 text-xs">
-                    <span id="wk-cost-cpu" class="text-slate-500 font-mono font-medium">อยู่ในโควต้าฟรี</span>
-                    <span id="wk-pct-cpu" class="text-slate-400 font-bold hidden">0%</span>
                 </div>
             </div>
         </div>
@@ -185,23 +168,24 @@
     function formatNumber(num) {
         if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
         if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-        return Math.round(num).toLocaleString();
+        return num.toLocaleString();
     }
 
-    function updateCardUI(idPrefix, val, limit, cost, isMonthly = true) {
+    function updateCardUI(id, val, limit, cost) {
         const pct = Math.min((val / limit) * 100, 100).toFixed(1);
-        const valEl = document.getElementById(`${idPrefix}-val`);
-        const barEl = document.getElementById(`${idPrefix}-bar`);
-        const pctEl = document.getElementById(`${idPrefix}-pct`);
-        const costEl = document.getElementById(`${idPrefix}-cost`);
-
-        if (valEl) valEl.textContent = val >= 1000 ? formatNumber(val) : val.toFixed(val % 1 === 0 ? 0 : 2);
+        const valEl = document.getElementById(`val-${id}`);
+        if (valEl) valEl.textContent = typeof val === 'number' && val % 1 !== 0 ? val.toFixed(2) : formatNumber(val);
+        
+        const pctEl = document.getElementById(`pct-${id}`);
         if (pctEl) pctEl.textContent = `${pct}%`;
-        if (barEl) {
-            barEl.style.width = `${pct}%`;
-            if (parseFloat(pct) > 90) barEl.classList.add('bg-red-500');
+        
+        const bar = document.getElementById(`bar-${id}`);
+        if (bar) {
+            bar.style.width = `${pct}%`;
+            if (parseFloat(pct) > 90) bar.classList.add('bg-red-500');
         }
         
+        const costEl = document.getElementById(`cost-${id}`);
         if (costEl) {
             if (cost > 0) {
                 costEl.textContent = `+$${cost.toFixed(2)}`;
@@ -226,51 +210,24 @@
             } else {
                 document.getElementById('dashboard-content').classList.remove('hidden');
                 
-                // --- R2 Section ---
-                updateCardUI('r2-storage', data.r2.storage_gb, data.r2.storage_limit, data.r2.storage_cost);
-                document.getElementById('r2-val-storage').textContent = data.r2.storage_gb.toFixed(2);
+                // R2 Update
+                updateCardUI('storage', data.storage_gb, data.storage_limit, data.storage_cost);
+                updateCardUI('class-a', data.r2_class_a, data.class_a_limit, data.class_a_cost);
+                updateCardUI('class-b', data.r2_class_b, data.class_b_limit, data.class_b_cost);
                 
-                updateCardUI('r2-class-a', data.r2.class_a, data.r2.class_a_limit, data.r2.class_a_cost);
-                updateCardUI('r2-class-b', data.r2.class_b, data.r2.class_b_limit, data.r2.class_b_cost);
-
-                // --- Workers Section ---
+                // Worker Update
+                document.getElementById('worker-period').textContent = data.worker_label;
+                const workerLimitStr = data.worker_limit >= 1000000 ? (data.worker_limit/1000000) + 'M' : (data.worker_limit/1000) + 'K';
+                document.getElementById('limit-worker').textContent = `/ ${workerLimitStr}`;
+                
                 const badge = document.getElementById('worker-badge');
-                document.getElementById('worker-label').textContent = data.worker_label;
-                
                 if (data.worker_plan === 'PAID') {
                     badge.textContent = '👑 PAID';
                     badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30';
-                    
-                    // Show Accumulative CPU UI
-                    document.getElementById('cpu-container-accum').classList.remove('hidden');
-                    document.getElementById('cpu-container-limit').classList.add('hidden');
-                    document.getElementById('cpu-label').textContent = 'MONTHLY CPU TIME';
-                    document.getElementById('wk-pct-cpu').classList.remove('hidden');
-                    document.getElementById('avg-cpu-tag').classList.remove('hidden');
-                    document.getElementById('avg-cpu-tag').textContent = `${data.workers.avg_cpu_ms} ms avg`;
-                    
-                    updateCardUI('wk-requests', data.workers.requests, data.workers.requests_limit, data.workers.requests_cost);
-                    document.getElementById('wk-limit-requests').textContent = `/ 10M`;
-                    
-                    updateCardUI('wk-cpu', data.workers.cpu_ms, data.workers.cpu_limit, data.workers.cpu_cost);
-                } else {
-                    badge.textContent = 'FREE';
-                    badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-500';
-                    
-                    // Show Per-Request Limit UI
-                    document.getElementById('cpu-container-accum').classList.add('hidden');
-                    document.getElementById('cpu-container-limit').classList.remove('hidden');
-                    document.getElementById('cpu-label').textContent = 'CPU LIMIT (PER REQ)';
-                    document.getElementById('wk-pct-cpu').classList.add('hidden');
-                    document.getElementById('avg-cpu-tag').classList.remove('hidden');
-                    document.getElementById('avg-cpu-tag').textContent = `${data.workers.avg_cpu_ms} ms avg`;
-                    
-                    updateCardUI('wk-requests', data.workers.requests, data.workers.requests_limit, data.workers.requests_cost);
-                    document.getElementById('wk-limit-requests').textContent = `/ 100K`;
                 }
-
-                // Total
-                document.getElementById('val-total-overage').textContent = `$${data.total_overage.toFixed(2)}`;
+                
+                updateCardUI('worker', data.worker_requests, data.worker_limit, data.worker_cost);
+                document.getElementById('val-total-overage').textContent = `+$${data.total_overage.toFixed(2)}`;
             }
         } catch (e) {
             document.getElementById('stats-loading').classList.add('hidden');
@@ -283,7 +240,6 @@
         try {
             const response = await fetch('/api/billing');
             const data = await response.json();
-            
             if (!data.error) {
                 document.getElementById('val-next-bill').textContent = data.next_billing_date;
                 document.getElementById('val-last-payment').textContent = data.last_payment;
