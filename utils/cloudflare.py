@@ -25,44 +25,60 @@ def get_cloudflare_stats():
             subs = sub_res.json().get("result", [])
             for sub in subs:
                 rate_plan = sub.get("rate_plan", {}).get("id", "").lower()
-                # Strictly check for Worker paid plans, do not trigger on 'r2_paid'
+                # Strictly check for Worker paid plans
                 if "workers_paid" in rate_plan or "workers_unbound" in rate_plan:
                     worker_plan = "paid"
                     break
     except:
         pass
 
-    # 2. Get GraphQL Stats for the current month
+    # 2. Get Dates
     now = datetime.datetime.utcnow()
-    # Use 1st of current month as approximate billing cycle start
+    # Monthly start (for R2 and Paid Workers)
     first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    datetime_geq = first_of_month.strftime("%Y-%m-%dT%H:%M:%SZ")
+    month_start_str = first_of_month.strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    # Daily start (for Free Workers)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_str = today_start.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     url = "https://api.cloudflare.com/client/v4/graphql"
     query = """
-    query GetStats($accountTag: string, $datetimeGeq: string, $bucketName: string) {
+    query GetStats($accountTag: string, $monthStart: string, $todayStart: string) {
       viewer {
         accounts(filter: {accountTag: $accountTag}) {
-          # R2 Operations (Requests)
-          r2OperationsAdaptiveGroups(limit: 10000, filter: {datetime_geq: $datetimeGeq, bucketName: $bucketName}) {
+          # R2 Operations (Monthly)
+          r2Monthly: r2OperationsAdaptiveGroups(limit: 1000, filter: {datetime_geq: $monthStart}) {
             dimensions {
               actionType
+              bucketName
             }
             sum {
               requests
             }
           }
-          # R2 Storage (Peak in the selected period)
-          r2StorageAdaptiveGroups(limit: 1, filter: {datetime_geq: $datetimeGeq, bucketName: $bucketName}) {
+          # R2 Storage (Current)
+          r2Storage: r2StorageAdaptiveGroups(limit: 100, filter: {datetime_geq: $monthStart}) {
+            dimensions {
+              bucketName
+            }
             max {
               metadataSize
               payloadSize
             }
           }
-          # Workers Invocations (Requests)
-          workersInvocationsAdaptive(limit: 10000, filter: {datetime_geq: $datetimeGeq}) {
+          # Workers Monthly (for Paid Plan)
+          workersMonthly: workersInvocationsAdaptive(limit: 1, filter: {datetime_geq: $monthStart}) {
             sum {
               requests
+              cpuTimeUs
+            }
+          }
+          # Workers Daily (for Free Plan)
+          workersDaily: workersInvocationsAdaptive(limit: 1, filter: {datetime_geq: $todayStart}) {
+            sum {
+              requests
+              cpuTimeUs
             }
           }
         }
@@ -72,17 +88,20 @@ def get_cloudflare_stats():
 
     variables = {
         "accountTag": account_id,
-        "datetimeGeq": datetime_geq,
-        "bucketName": bucket_name
+        "monthStart": month_start_str,
+        "todayStart": today_start_str
     }
 
     try:
         response = requests.post(url, headers=headers, json={"query": query, "variables": variables})
-        response.raise_for_status()
+        print(f"Cloudflare API Status: {response.status_code}")
         data = response.json()
         
         if 'errors' in data and data['errors']:
+            print(f"Cloudflare API Errors: {data['errors']}")
             return {"error": data['errors'][0]['message']}
+
+        print(f"Cloudflare Raw Data Sample: {str(data)[:500]}...") # Log first 500 chars
 
         accounts = data.get('data', {}).get('viewer', {}).get('accounts', [])
         if not accounts:
@@ -90,73 +109,83 @@ def get_cloudflare_stats():
 
         account_data = accounts[0]
         
-        # Parse R2 Requests by Class
+        # Parse R2
+        r2_class_a = 0
+        r2_class_b = 0
         class_a_types = ['PutObject', 'CopyObject', 'CompleteMultipartUpload', 'CreateMultipartUpload', 'UploadPart', 'UploadPartCopy', 'ListObjects', 'ListBuckets', 'CreateBucket']
         class_b_types = ['GetObject', 'HeadObject', 'HeadBucket']
         
-        r2_class_a = 0
-        r2_class_b = 0
-        r2_ops = account_data.get('r2OperationsAdaptiveGroups', [])
-        for op in r2_ops:
-            action = op.get('dimensions', {}).get('actionType', '')
-            reqs = op.get('sum', {}).get('requests', 0)
-            if action in class_a_types:
-                r2_class_a += reqs
-            elif action in class_b_types:
-                r2_class_b += reqs
+        for op in account_data.get('r2Monthly', []):
+            # Only count for our specific bucket
+            if op.get('dimensions', {}).get('bucketName') == bucket_name:
+                action = op.get('dimensions', {}).get('actionType', '')
+                reqs = op.get('sum', {}).get('requests', 0)
+                if action in class_a_types: r2_class_a += reqs
+                elif action in class_b_types: r2_class_b += reqs
             
-        # Parse Worker Requests
-        worker_requests = 0
-        worker_invocations = account_data.get('workersInvocationsAdaptive', [])
-        if worker_invocations and len(worker_invocations) > 0:
-            worker_requests = worker_invocations[0].get('sum', {}).get('requests', 0)
+        # Parse Workers based on Plan
+        if worker_plan == "paid":
+            stats_list = account_data.get('workersMonthly', [])
+            worker_stats = stats_list[0].get('sum', {}) if stats_list else {}
+            worker_requests = worker_stats.get('requests', 0)
+            cpu_time_ms = worker_stats.get('cpuTimeUs', 0) / 1000.0
+            worker_limit = 10000000
+            cpu_limit = 30000000
+            worker_label = "Monthly Invocations"
+        else:
+            stats_list = account_data.get('workersDaily', [])
+            worker_stats = stats_list[0].get('sum', {}) if stats_list else {}
+            worker_requests = worker_stats.get('requests', 0)
+            cpu_time_ms = worker_stats.get('cpuTimeUs', 0) / 1000.0
+            worker_limit = 100000
+            cpu_limit = 10
+            worker_label = "Daily Invocations"
             
-        # Parse R2 Storage Size
+        # Parse Storage
         storage_bytes = 0
-        r2_storage = account_data.get('r2StorageAdaptiveGroups', [])
-        if r2_storage and len(r2_storage) > 0:
-            max_vals = r2_storage[0].get('max', {})
-            storage_bytes = max_vals.get('metadataSize', 0) + max_vals.get('payloadSize', 0)
+        for item in account_data.get('r2Storage', []):
+            if item.get('dimensions', {}).get('bucketName') == bucket_name:
+                max_vals = item.get('max', {})
+                storage_bytes = max_vals.get('metadataSize', 0) + max_vals.get('payloadSize', 0)
+                break # Found our bucket
 
-        # Calculate Quotas and Overages
+        # Calculate Costs
         storage_gb = storage_bytes / (1024**3)
-        storage_limit = 10.0
-        storage_overage = max(0, storage_gb - storage_limit)
-        storage_cost = storage_overage * 0.015
-
-        class_a_limit = 1000000
-        class_a_overage = max(0, r2_class_a - class_a_limit)
-        class_a_cost = (class_a_overage / 1000000) * 4.50
-
-        class_b_limit = 10000000
-        class_b_overage = max(0, r2_class_b - class_b_limit)
-        class_b_cost = (class_b_overage / 1000000) * 0.36
-
-        worker_limit = 10000000 if worker_plan == "paid" else 100000
-        worker_overage = max(0, worker_requests - worker_limit)
-        worker_cost = (worker_overage / 1000000) * 0.30 if worker_plan == "paid" else 0.0
-
-        total_est_overage = storage_cost + class_a_cost + class_b_cost + worker_cost
+        storage_cost = max(0, storage_gb - 10) * 0.015
+        class_a_cost = (max(0, r2_class_a - 1000000) / 1000000) * 4.50
+        class_b_cost = (max(0, r2_class_b - 10000000) / 1000000) * 0.36
+        
+        # Worker costs (Paid plan only)
+        worker_req_cost = 0.0
+        worker_cpu_cost = 0.0
+        if worker_plan == "paid":
+            worker_req_cost = (max(0, worker_requests - 10000000) / 1000000) * 0.30
+            worker_cpu_cost = (max(0, cpu_time_ms - 30000000) / 1000000) * 0.02
 
         return {
             "worker_plan": worker_plan.upper(),
-            "storage_gb": round(storage_gb, 2),
-            "storage_limit": storage_limit,
-            "storage_cost": round(storage_cost, 2),
-            
-            "r2_class_a": r2_class_a,
-            "class_a_limit": class_a_limit,
-            "class_a_cost": round(class_a_cost, 2),
-            
-            "r2_class_b": r2_class_b,
-            "class_b_limit": class_b_limit,
-            "class_b_cost": round(class_b_cost, 2),
-            
-            "worker_requests": worker_requests,
-            "worker_limit": worker_limit,
-            "worker_cost": round(worker_cost, 2),
-            
-            "total_est_overage": round(total_est_overage, 2)
+            "worker_label": worker_label,
+            "r2": {
+                "storage_gb": round(storage_gb, 2),
+                "storage_limit": 10,
+                "storage_cost": round(storage_cost, 2),
+                "class_a": r2_class_a,
+                "class_a_limit": 1000000,
+                "class_a_cost": round(class_a_cost, 2),
+                "class_b": r2_class_b,
+                "class_b_limit": 10000000,
+                "class_b_cost": round(class_b_cost, 2),
+            },
+            "workers": {
+                "requests": worker_requests,
+                "requests_limit": worker_limit,
+                "requests_cost": round(worker_req_cost, 2),
+                "cpu_ms": round(cpu_time_ms, 2),
+                "cpu_limit": cpu_limit,
+                "cpu_cost": round(worker_cpu_cost, 2),
+                "avg_cpu_ms": round(cpu_time_ms / max(1, worker_requests), 2)
+            },
+            "total_overage": round(storage_cost + class_a_cost + class_b_cost + worker_req_cost + worker_cpu_cost, 2)
         }
 
     except requests.exceptions.RequestException as e:
@@ -184,7 +213,7 @@ def get_cloudflare_billing():
     }
 
     try:
-        # 1. Fetch Subscriptions to get next billing date (current_period_end)
+        # 1. Fetch Subscriptions to get next billing date
         sub_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/subscriptions"
         sub_res = requests.get(sub_url, headers=headers)
         
@@ -193,12 +222,9 @@ def get_cloudflare_billing():
             if sub_data.get("success") and sub_data.get("result"):
                 subs = sub_data["result"]
                 for sub in subs:
-                    # Usually Cloudflare sets 'current_period_end' in milliseconds or ISO string
                     current_period_end = sub.get("current_period_end")
                     if current_period_end:
-                        # Find the furthest date in all active subscriptions
                         try:
-                            # It's usually a timestamp in milliseconds
                             if isinstance(current_period_end, (int, float)):
                                 dt = datetime.datetime.fromtimestamp(current_period_end / 1000.0)
                             else:
@@ -206,11 +232,11 @@ def get_cloudflare_billing():
                             
                             formatted_date = dt.strftime("%d %b %Y")
                             billing_info["next_billing_date"] = formatted_date
-                            break # Found a valid date, break
+                            break
                         except:
                             pass
         
-        # 2. Fetch Billing History to get the last paid invoice amount
+        # 2. Fetch Billing History
         history_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/billing/history"
         history_res = requests.get(history_url, headers=headers)
         
@@ -222,7 +248,6 @@ def get_cloudflare_billing():
                     txn_action = txn.get("action", "").lower()
                     txn_type = txn.get("type", "").lower()
                     
-                    # We look for a charge or payment
                     if txn_action in ["charge", "payment"] or txn_type in ["charge", "payment"]:
                         amount = txn.get("amount", 0)
                         currency = txn.get("currency", "USD")

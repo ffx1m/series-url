@@ -6,11 +6,6 @@
         <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">ติดตามการทำงาน</h2>
         <p class="text-slate-400">แสดงสถานะการประมวลผลและ Log แบบ Real-time</p>
     </div>
-    <div class="hidden sm:block">
-        <button onclick="updateTasks()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl border border-white/5 transition-all flex items-center gap-2">
-            <i class="fa-solid fa-rotate"></i> รีเฟรช
-        </button>
-    </div>
 </div>
 
 <div class="space-y-6">
@@ -36,11 +31,6 @@
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                 <i class="fa-solid fa-terminal text-purple-400"></i> บันทึกการทำงาน (Live Logs)
             </h3>
-            <div class="flex gap-4">
-                <button onclick="clearLogs()" class="text-xs text-slate-500 hover:text-white transition-colors flex items-center gap-1">
-                    <i class="fa-solid fa-trash-can"></i> ล้างหน้าจอ
-                </button>
-            </div>
         </div>
         
         <div class="glass-panel rounded-2xl overflow-hidden border border-white/5 flex flex-col shadow-2xl">
@@ -86,7 +76,6 @@
 <script>
     let activeTaskId = null;
     let tasksData = {};
-    let autoSelectDone = false;
 
     document.addEventListener('DOMContentLoaded', () => {
         updateTasks();
@@ -110,7 +99,6 @@
         const logSection = document.getElementById('log-section');
         
         const allTids = Object.keys(tasks).sort((a, b) => {
-            // Sort by status (processing first) then by ID (pseudo-time)
             if (tasks[a].status === 'processing' && tasks[b].status !== 'processing') return -1;
             if (tasks[a].status !== 'processing' && tasks[b].status === 'processing') return 1;
             return b.localeCompare(a);
@@ -119,14 +107,13 @@
         const processingTids = allTids.filter(tid => tasks[tid].status === 'processing');
         const historyTids = allTids.filter(tid => tasks[tid].status !== 'processing').slice(0, 12);
 
-        // 1. Render Active Tasks
         if (processingTids.length > 0) {
             let activeHtml = '';
             processingTids.forEach(tid => {
                 const task = tasks[tid];
                 const isActive = tid === activeTaskId;
                 activeHtml += `
-                    <div onclick="selectTask('${tid}')" class="glass-panel p-5 rounded-2xl border ${isActive ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'} cursor-pointer hover:border-white/20 transition-all shadow-lg">
+                    <div onclick="selectTask('${tid}')" class="glass-panel p-5 rounded-2xl border ${isActive ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'} cursor-pointer hover:border-white/20 transition-all shadow-lg relative group/card">
                         <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                             <div class="flex items-center gap-4">
                                 <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
@@ -137,7 +124,7 @@
                                     <p class="text-sm text-slate-400">${task.message}</p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-4 sm:min-w-[200px]">
+                            <div class="flex items-center gap-4 sm:min-w-[250px]">
                                 <div class="flex-1">
                                     <div class="flex justify-between mb-1">
                                         <span class="text-[10px] font-bold text-slate-500 uppercase">Progress</span>
@@ -147,7 +134,10 @@
                                         <div class="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-500" style="width: ${task.progress}"></div>
                                     </div>
                                 </div>
-                                ${isActive ? '<i class="fa-solid fa-chevron-down text-blue-400 animate-bounce"></i>' : '<i class="fa-solid fa-chevron-right text-slate-600"></i>'}
+                                <!-- Cancel Button -->
+                                <button onclick="event.stopPropagation(); requestCancel('${tid}')" class="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-3 py-2 rounded-lg border border-red-500/20 transition-all text-xs font-bold shrink-0 flex items-center gap-2">
+                                    <i class="fa-solid fa-xmark"></i> ยกเลิก
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -167,16 +157,13 @@
                     <p class="text-slate-500 font-medium">ยังไม่มีงานที่กำลังประมวลผลในขณะนี้</p>
                 </div>
             `;
-            // If no active tasks and we are following one, keep showing it as completed
             if (activeTaskId && tasks[activeTaskId] && tasks[activeTaskId].status !== 'processing') {
-                // Keep showing log section
             } else {
                 logSection.classList.add('hidden');
                 activeTaskId = null;
             }
         }
 
-        // 2. Render History
         let historyHtml = '';
         historyTids.forEach(tid => {
             const task = tasks[tid];
@@ -200,7 +187,6 @@
         });
         historyContainer.innerHTML = historyHtml || '<p class="text-slate-600 text-sm italic px-2">ยังไม่มีประวัติการทำงาน</p>';
 
-        // 3. Update Logs if task selected
         if (activeTaskId && tasks[activeTaskId]) {
             renderLogs(tasks[activeTaskId]);
         }
@@ -250,9 +236,20 @@
         }
     }
 
-    function clearLogs() {
-        const container = document.getElementById('log-content');
-        container.innerHTML = '<div class="text-slate-600 italic font-mono">Logs cleared by user...</div>';
+    async function requestCancel(tid) {
+        if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการยกเลิกงานนี้?')) return;
+        
+        try {
+            const res = await fetch(`/api/task/${tid}/cancel`, { method: 'POST' });
+            if (res.ok) {
+                showToast('ส่งคำขอยกเลิกงานแล้ว');
+                updateTasks();
+            } else {
+                showToast('ไม่สามารถยกเลิกงานได้', true);
+            }
+        } catch (e) {
+            showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', true);
+        }
     }
 </script>
 {% endblock %}

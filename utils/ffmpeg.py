@@ -8,6 +8,10 @@ from utils.r2 import upload_file_to_r2, load_config, db
 
 # Store global task statuses (In-memory for fast access, but mirrored to MongoDB)
 tasks = {}
+# Store running process objects to allow cancellation
+running_processes = {}
+# Global lock to ensure only one heavy task starts at a time
+task_lock = threading.Lock()
 
 def update_task_status(task_id, update_data):
     # Update memory
@@ -26,7 +30,24 @@ def update_task_status(task_id, update_data):
         except Exception as e:
             print(f"Error updating task in MongoDB: {e}")
 
+def cancel_task(task_id):
+    if task_id in running_processes:
+        try:
+            process = running_processes[task_id]
+            process.terminate() # or process.kill()
+            return True
+        except Exception as e:
+            print(f"Error killing process {task_id}: {e}")
+
+    # Even if process not found, we mark as canceled in DB
+    update_task_status(task_id, {
+        'status': 'canceled',
+        'message': 'งานถูกยกเลิกโดยผู้ใช้'
+    })
+    return True
+
 def get_video_duration(m3u8_url):
+
     try:
         cmd = [
             'ffprobe', '-v', 'error',
@@ -66,6 +87,14 @@ def start_video_conversion(series_name, ep_name, m3u8_url):
     return task_id
 
 def _process_video_task(task_id, series_name, ep_name, m3u8_url):
+    # Use lock to ensure only one heavy task runs at a time
+    if not task_lock.acquire(blocking=False):
+        update_task_status(task_id, {
+            'status': 'error',
+            'message': 'ระบบไม่สามารถเริ่มงานได้เนื่องจากมีงานอื่นกำลังดำเนินการอยู่'
+        })
+        return
+
     try:
         tmp_dir = f"data/tmp_{task_id}"
         os.makedirs(tmp_dir, exist_ok=True)
@@ -98,6 +127,7 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
         ]
 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        running_processes[task_id] = process
 
         # Regex to find time=HH:MM:SS.ms
         time_regex = re.compile(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})")
@@ -139,6 +169,15 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
                     update_task_status(task_id, status_update)
 
         process.wait()
+        
+        # Remove from running processes
+        if task_id in running_processes:
+            del running_processes[task_id]
+
+        # Check if task was canceled
+        if tasks.get(task_id, {}).get('status') == 'canceled':
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return
 
         if process.returncode != 0:
             update_task_status(task_id, {
@@ -207,6 +246,9 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
             'status': 'error',
             'message': str(e)
         })
+    finally:
+        # Always release the lock so next task can start
+        task_lock.release()
 
 
 def start_image_conversion(series_name, input_image_path):
@@ -227,6 +269,14 @@ def start_image_conversion(series_name, input_image_path):
     return task_id
 
 def _process_image_task(task_id, series_name, input_image_path):
+    # Use lock to ensure only one heavy task runs at a time
+    if not task_lock.acquire(blocking=False):
+        update_task_status(task_id, {
+            'status': 'error',
+            'message': 'ระบบไม่สามารถเริ่มงานได้เนื่องจากมีงานอื่นกำลังดำเนินการอยู่'
+        })
+        return
+
     try:
         output_webp = f"{input_image_path}.webp"
         task_logs = []
@@ -246,11 +296,24 @@ def _process_image_task(task_id, series_name, input_image_path):
         ]
 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        running_processes[task_id] = process
+        
         for line in process.stdout:
             task_logs.append(line.strip())
             if len(task_logs) > 100: task_logs.pop(0)
 
         process.wait()
+        
+        # Remove from running processes
+        if task_id in running_processes:
+            del running_processes[task_id]
+            
+        if tasks.get(task_id, {}).get('status') == 'canceled':
+            try: os.remove(input_image_path)
+            except: pass
+            try: os.remove(output_webp)
+            except: pass
+            return
 
         if process.returncode != 0:
             update_task_status(task_id, {
@@ -304,6 +367,9 @@ def _process_image_task(task_id, series_name, input_image_path):
             'status': 'error',
             'message': str(e)
         })
+    finally:
+        # Always release the lock
+        task_lock.release()
 
 def get_task_status(task_id):
     # Try memory first
