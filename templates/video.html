@@ -144,13 +144,27 @@
     async function resumeTask() {
         const taskId = localStorage.getItem('video_task_id');
 
-        if (taskId) {
-            const btn = document.getElementById('convert-btn');
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังดำเนินการต่อ...';
-            btn.classList.add('opacity-70', 'cursor-not-allowed');
-            document.getElementById('progress-container').classList.remove('hidden');
-            checkInterval = setInterval(() => checkStatus(taskId, btn), 1500);
+        // Always check if there's ANY task running to lock UI
+        try {
+            const allTasksRes = await fetch('/api/tasks');
+            const allTasks = await allTasksRes.json();
+            const activeTask = Object.values(allTasks).find(t => t.status === 'processing');
+
+            if (activeTask) {
+                const btn = document.getElementById('convert-btn');
+                btn.disabled = true;
+                btn.classList.add('opacity-70', 'cursor-not-allowed');
+                
+                if (taskId && activeTask.task_id === taskId) {
+                    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังดำเนินการต่อ...';
+                    document.getElementById('progress-container').classList.remove('hidden');
+                    checkInterval = setInterval(() => checkStatus(taskId, btn), 1500);
+                } else {
+                    btn.innerHTML = `<i class="fa-solid fa-lock"></i> มีงานอื่นกำลังทำงานอยู่ (${activeTask.type === 'video' ? 'วิดีโอ' : 'รูปภาพ'})`;
+                }
+            }
+        } catch (e) {
+            console.error('Failed to check tasks status', e);
         }
     }
 

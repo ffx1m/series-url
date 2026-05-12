@@ -117,25 +117,25 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
             if match and total_duration > 0:
                 current_time = time_to_seconds(match.group(1))
                 percent = min(100, int((current_time / total_duration) * 100))
-                # FFmpeg phase represents 50% of the total task
-                overall_percent = int(percent / 2)
-
+                # FFmpeg phase represents 85% of the total task
+                overall_percent = int(percent * 0.85)
+                
                 # Prevent progress from going backwards
                 if overall_percent > current_progress_val:
                     current_progress_val = overall_percent
                     status_update['progress'] = f"{current_progress_val}%"
-                    status_update['message'] = f"กำลังแปลงไฟล์วิดีโอ... ({percent}%)"
+                    status_update['message'] = f"กำลังแปลงไฟล์วิดีโอ... {percent}%"
                     update_task_status(task_id, status_update)
             elif 'frame=' in line:
                 # Fallback if no duration: start at 5% and stay until actual progress takes over
                 if current_progress_val < 5:
                     current_progress_val = 5
                     status_update['progress'] = '5%'
-                    status_update['message'] = 'กำลังดึงข้อมูลและเริ่มการแปลงวิดีโอ...'
+                    status_update['message'] = 'กำลังเริ่มประมวลผลวิดีโอ...'
                     update_task_status(task_id, status_update)
             else:
                 # Just update logs periodically
-                if len(task_logs) % 10 == 0:
+                if len(task_logs) % 15 == 0:
                     update_task_status(task_id, status_update)
 
         process.wait()
@@ -143,15 +143,15 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
         if process.returncode != 0:
             update_task_status(task_id, {
                 'status': 'error',
-                'message': 'FFmpeg process failed. ตรวจสอบ URL หรือความสมบูรณ์ของไฟล์ต้นทาง',
+                'message': 'FFmpeg ล้มเหลว! กรุณาตรวจสอบ URL วิดีโอต้นทาง',
                 'logs': task_logs
             })
             shutil.rmtree(tmp_dir, ignore_errors=True)
             return
 
         update_task_status(task_id, {
-            'message': 'กำลังอัพโหลดไฟล์ขึ้นสู่ Cloudflare R2...',
-            'progress': '50%',
+            'message': 'การแปลงไฟล์เสร็จสิ้น กำลังเริ่มอัพโหลด...',
+            'progress': '85%',
             'logs': task_logs + ["Starting upload to R2..."]
         })
 
@@ -162,7 +162,7 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
         if total_files == 0:
             update_task_status(task_id, {
                 'status': 'error',
-                'message': 'ไม่พบไฟล์ที่จะอัพโหลด อาจเกิดข้อผิดพลาดในการแปลงไฟล์'
+                'message': 'ไม่พบไฟล์ที่จะอัพโหลด อาจเกิดข้อผิดพลาดในการประมวลผล'
             })
             shutil.rmtree(tmp_dir, ignore_errors=True)
             return
@@ -178,11 +178,11 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
             task_logs.append(f"Uploaded: {filename}")
             if len(task_logs) > 100: task_logs.pop(0)
 
-            # Upload phase represents 50% to 100%
-            percent = 50 + int(((idx + 1) / total_files) * 50)
+            # Upload phase represents 85% to 100%
+            percent = 85 + int(((idx + 1) / total_files) * 15)
             update_task_status(task_id, {
                 'progress': f"{percent}%",
-                'message': f"อัพโหลดไฟล์ {idx+1}/{total_files} ชิ้น",
+                'message': f"กำลังอัพโหลด: {filename} ({idx+1}/{total_files})",
                 'logs': task_logs
             })
 
@@ -197,7 +197,7 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
         update_task_status(task_id, {
             'status': 'completed',
             'progress': '100%',
-            'message': 'เสร็จสิ้นกระบวนการทั้งหมด!',
+            'message': 'อัพโหลดและแปลงไฟล์สำเร็จ 100%!',
             'result_url': final_url,
             'logs': task_logs
         })

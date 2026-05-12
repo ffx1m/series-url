@@ -1,62 +1,84 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="mb-8 flex justify-between items-center">
+<div class="mb-8 flex justify-between items-end">
     <div>
-        <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">ระบบ Logs</h2>
-        <p class="text-slate-400">ติดตามการทำงานของ FFmpeg และการอัพโหลดแบบ Real-time</p>
+        <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">ติดตามการทำงาน</h2>
+        <p class="text-slate-400">แสดงสถานะการประมวลผลและ Log แบบ Real-time</p>
     </div>
-    <div class="bg-slate-800/50 px-4 py-2 rounded-xl border border-white/5 flex items-center gap-3">
-        <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-        <span class="text-sm font-medium text-slate-300">Live Status</span>
+    <div class="hidden sm:block">
+        <button onclick="updateTasks()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl border border-white/5 transition-all flex items-center gap-2">
+            <i class="fa-solid fa-rotate"></i> รีเฟรช
+        </button>
     </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-    <!-- Task List -->
-    <div class="lg:col-span-1 space-y-4">
-        <h3 class="text-lg font-semibold text-white px-2 flex items-center gap-2">
-            <i class="fa-solid fa-list-check text-blue-400"></i> รายการงานทั้งหมด
+<div class="space-y-6">
+    <!-- Active Tasks Section -->
+    <div id="active-tasks-container" class="space-y-4">
+        <h3 class="text-lg font-semibold text-white px-1 flex items-center gap-2">
+            <i class="fa-solid fa-spinner fa-spin text-blue-400"></i> งานที่กำลังดำเนินการ
         </h3>
-        <div id="task-list" class="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-            <!-- Tasks will be injected here -->
-            <div class="text-slate-500 text-center py-10 bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">
-                ไม่มีงานที่กำลังดำเนินการ
+        <div id="active-list" class="grid grid-cols-1 gap-4">
+            <!-- Processing tasks will be injected here -->
+            <div class="bg-slate-900/40 rounded-2xl border border-dashed border-slate-800 py-12 text-center">
+                <div class="bg-slate-800/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-600">
+                    <i class="fa-solid fa-mug-hot text-2xl"></i>
+                </div>
+                <p class="text-slate-500 font-medium">ยังไม่มีงานที่กำลังประมวลผลในขณะนี้</p>
             </div>
         </div>
     </div>
 
-    <!-- Log Detail -->
-    <div class="lg:col-span-2 space-y-4">
-        <h3 class="text-lg font-semibold text-white px-2 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <i class="fa-solid fa-terminal text-purple-400"></i> FFmpeg Output
+    <!-- Log Terminal Section -->
+    <div id="log-section" class="space-y-4 hidden">
+        <div class="flex justify-between items-center px-1">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-purple-400"></i> บันทึกการทำงาน (Live Logs)
+            </h3>
+            <div class="flex gap-4">
+                <button onclick="clearLogs()" class="text-xs text-slate-500 hover:text-white transition-colors flex items-center gap-1">
+                    <i class="fa-solid fa-trash-can"></i> ล้างหน้าจอ
+                </button>
             </div>
-            <button onclick="clearLogs()" class="text-xs font-normal text-slate-500 hover:text-slate-300 transition-colors">
-                <i class="fa-solid fa-trash-can mr-1"></i> เคลียร์หน้าจอ
-            </button>
+        </div>
+        
+        <div class="glass-panel rounded-2xl overflow-hidden border border-white/5 flex flex-col shadow-2xl">
+            <div id="log-header" class="bg-slate-900/90 px-5 py-3 border-b border-white/5 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <span id="active-task-name" class="text-sm font-mono text-blue-400 font-bold">TASK_NAME</span>
+                    <span id="active-task-status" class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold uppercase">PROCESSING</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <span class="text-[10px] text-slate-500 font-mono">LIVE FEED</span>
+                </div>
+            </div>
+            <div id="log-content" class="h-[400px] md:h-[500px] bg-black/60 p-5 font-mono text-xs sm:text-sm text-slate-300 overflow-y-auto custom-scrollbar leading-relaxed">
+                <!-- Log lines injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent History Section -->
+    <div class="pt-4 space-y-4">
+        <h3 class="text-lg font-semibold text-white px-1 flex items-center gap-2">
+            <i class="fa-solid fa-history text-slate-400"></i> ประวัติงานล่าสุด
         </h3>
-        <div class="glass-panel rounded-2xl overflow-hidden border border-white/5 flex flex-col h-[600px]">
-            <div id="log-header" class="bg-slate-900/80 px-5 py-3 border-b border-white/5 flex justify-between items-center">
-                <span id="active-task-name" class="text-sm font-mono text-blue-400">กรุณาเลือกงานจากรายการด้านซ้าย</span>
-                <span id="active-task-status" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">-</span>
-            </div>
-            <div id="log-content" class="flex-1 bg-black/40 p-5 font-mono text-xs sm:text-sm text-slate-300 overflow-y-auto custom-scrollbar leading-relaxed">
-                <!-- Log lines will be injected here -->
-                <div class="text-slate-600 italic">Select a task to view real-time logs...</div>
-            </div>
+        <div id="history-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Completed/Error tasks will be injected here -->
         </div>
     </div>
 </div>
 
 <style>
-    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     
-    .log-line { border-left: 2px solid transparent; padding-left: 12px; margin-bottom: 4px; transition: all 0.2s; }
+    .log-line { border-left: 2px solid transparent; padding-left: 12px; margin-bottom: 2px; transition: all 0.1s; }
     .log-line:hover { background: rgba(255,255,255,0.03); border-left-color: #3b82f6; }
-    .log-error { color: #f87171; }
+    .log-error { color: #f87171; background: rgba(220, 38, 38, 0.05); }
     .log-success { color: #34d399; }
     .log-info { color: #60a5fa; }
 </style>
@@ -64,6 +86,7 @@
 <script>
     let activeTaskId = null;
     let tasksData = {};
+    let autoSelectDone = false;
 
     document.addEventListener('DOMContentLoaded', () => {
         updateTasks();
@@ -75,51 +98,111 @@
             const res = await fetch('/api/tasks');
             const data = await res.json();
             tasksData = data;
-            renderTaskList(data);
-            if (activeTaskId && data[activeTaskId]) {
-                renderLogs(data[activeTaskId]);
-            }
+            renderAll(data);
         } catch (e) {
             console.error('Failed to update tasks:', e);
         }
     }
 
-    function renderTaskList(tasks) {
-        const container = document.getElementById('task-list');
-        const taskIds = Object.keys(tasks).reverse().filter(tid => tasks[tid].status === 'processing');
+    function renderAll(tasks) {
+        const activeContainer = document.getElementById('active-list');
+        const historyContainer = document.getElementById('history-list');
+        const logSection = document.getElementById('log-section');
         
-        if (taskIds.length === 0) {
-            container.innerHTML = `<div class="text-slate-500 text-center py-10 bg-slate-900/40 rounded-2xl border border-dashed border-slate-800">ไม่มีงานในระบบ</div>`;
-            return;
+        const allTids = Object.keys(tasks).sort((a, b) => {
+            // Sort by status (processing first) then by ID (pseudo-time)
+            if (tasks[a].status === 'processing' && tasks[b].status !== 'processing') return -1;
+            if (tasks[a].status !== 'processing' && tasks[b].status === 'processing') return 1;
+            return b.localeCompare(a);
+        });
+
+        const processingTids = allTids.filter(tid => tasks[tid].status === 'processing');
+        const historyTids = allTids.filter(tid => tasks[tid].status !== 'processing').slice(0, 12);
+
+        // 1. Render Active Tasks
+        if (processingTids.length > 0) {
+            let activeHtml = '';
+            processingTids.forEach(tid => {
+                const task = tasks[tid];
+                const isActive = tid === activeTaskId;
+                activeHtml += `
+                    <div onclick="selectTask('${tid}')" class="glass-panel p-5 rounded-2xl border ${isActive ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'} cursor-pointer hover:border-white/20 transition-all shadow-lg">
+                        <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
+                                    <i class="fa-solid ${task.type === 'video' ? 'fa-video' : 'fa-image'} text-xl"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <h4 class="font-bold text-white truncate text-lg">${task.name || 'กำลังประมวลผล...'}</h4>
+                                    <p class="text-sm text-slate-400">${task.message}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4 sm:min-w-[200px]">
+                                <div class="flex-1">
+                                    <div class="flex justify-between mb-1">
+                                        <span class="text-[10px] font-bold text-slate-500 uppercase">Progress</span>
+                                        <span class="text-xs font-bold text-blue-400">${task.progress}</span>
+                                    </div>
+                                    <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                        <div class="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-500" style="width: ${task.progress}"></div>
+                                    </div>
+                                </div>
+                                ${isActive ? '<i class="fa-solid fa-chevron-down text-blue-400 animate-bounce"></i>' : '<i class="fa-solid fa-chevron-right text-slate-600"></i>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            activeContainer.innerHTML = activeHtml;
+            
+            if (!activeTaskId) {
+                selectTask(processingTids[0]);
+            }
+        } else {
+            activeContainer.innerHTML = `
+                <div class="bg-slate-900/40 rounded-2xl border border-dashed border-slate-800 py-12 text-center">
+                    <div class="bg-slate-800/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-600">
+                        <i class="fa-solid fa-mug-hot text-2xl"></i>
+                    </div>
+                    <p class="text-slate-500 font-medium">ยังไม่มีงานที่กำลังประมวลผลในขณะนี้</p>
+                </div>
+            `;
+            // If no active tasks and we are following one, keep showing it as completed
+            if (activeTaskId && tasks[activeTaskId] && tasks[activeTaskId].status !== 'processing') {
+                // Keep showing log section
+            } else {
+                logSection.classList.add('hidden');
+                activeTaskId = null;
+            }
         }
 
-        let html = '';
-        taskIds.forEach(tid => {
+        // 2. Render History
+        let historyHtml = '';
+        historyTids.forEach(tid => {
             const task = tasks[tid];
-            const isActive = tid === activeTaskId;
-            const statusColor = task.status === 'completed' ? 'bg-emerald-500' : 
-                              task.status === 'error' ? 'bg-red-500' : 'bg-blue-500';
-            
-            html += `
-                <div onclick="selectTask('${tid}')" class="glass-panel p-4 rounded-xl border ${isActive ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'} cursor-pointer hover:border-white/20 transition-all group">
+            const isError = task.status === 'error';
+            historyHtml += `
+                <div onclick="selectTask('${tid}')" class="bg-slate-900/40 p-4 rounded-xl border border-white/5 hover:bg-slate-800/50 transition-all cursor-pointer group">
                     <div class="flex justify-between items-start mb-2">
-                        <h4 class="font-medium text-slate-200 group-hover:text-white transition-colors truncate max-w-[150px]">${task.name || tid.slice(0,8)}</h4>
-                        <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded ${statusColor} text-white">${task.status}</span>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                            <div class="h-full ${statusColor} transition-all duration-500" style="width: ${task.progress}"></div>
+                        <div class="min-w-0">
+                            <h5 class="text-sm font-bold text-slate-300 group-hover:text-white transition-colors truncate">${task.name || tid.slice(0,8)}</h5>
+                            <p class="text-[10px] text-slate-500 truncate">${task.type === 'video' ? 'วิดีโอ' : 'รูปภาพ'}</p>
                         </div>
-                        <span class="text-xs font-bold text-slate-400">${task.progress}</span>
+                        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${isError ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}">${task.status}</span>
                     </div>
+                    ${task.result_url ? `
+                        <div class="mt-2 text-[10px] text-blue-400 truncate font-mono bg-blue-500/5 p-1.5 rounded border border-blue-500/10">
+                            ${task.result_url}
+                        </div>
+                    ` : ''}
                 </div>
             `;
         });
-        container.innerHTML = html;
-        
-        // Auto select first task if none selected
-        if (!activeTaskId && taskIds.length > 0) {
-            selectTask(taskIds[0]);
+        historyContainer.innerHTML = historyHtml || '<p class="text-slate-600 text-sm italic px-2">ยังไม่มีประวัติการทำงาน</p>';
+
+        // 3. Update Logs if task selected
+        if (activeTaskId && tasks[activeTaskId]) {
+            renderLogs(tasks[activeTaskId]);
         }
     }
 
@@ -127,12 +210,17 @@
         activeTaskId = tid;
         const task = tasksData[tid];
         if (task) {
-            document.getElementById('active-task-name').textContent = `Task: ${task.name || tid}`;
+            document.getElementById('log-section').classList.remove('hidden');
+            document.getElementById('active-task-name').textContent = task.name || tid;
             document.getElementById('active-task-status').textContent = task.status.toUpperCase();
-            document.getElementById('active-task-status').className = `text-[10px] px-2 py-0.5 rounded-full ${task.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`;
+            
+            const statusEl = document.getElementById('active-task-status');
+            if (task.status === 'completed') statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase';
+            else if (task.status === 'error') statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold uppercase';
+            else statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold uppercase';
+            
             renderLogs(task, true);
         }
-        updateTasks(); // refresh UI
     }
 
     function renderLogs(task, forceScroll = false) {
@@ -140,16 +228,17 @@
         const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
         
         if (!task.logs || task.logs.length === 0) {
-            container.innerHTML = `<div class="text-slate-600 italic">No logs available for this task.</div>`;
+            container.innerHTML = `<div class="text-slate-600 italic">กำลังรอ Log จากระบบ...</div>`;
             return;
         }
 
         let html = '';
         task.logs.forEach(line => {
             let typeClass = '';
-            if (line.toLowerCase().includes('error')) typeClass = 'log-error';
-            else if (line.toLowerCase().includes('successfully') || line.toLowerCase().includes('completed')) typeClass = 'log-success';
-            else if (line.toLowerCase().includes('starting') || line.toLowerCase().includes('uploaded')) typeClass = 'log-info';
+            const lowerLine = line.toLowerCase();
+            if (lowerLine.includes('error')) typeClass = 'log-error';
+            else if (lowerLine.includes('successfully') || lowerLine.includes('completed')) typeClass = 'log-success';
+            else if (lowerLine.includes('starting') || lowerLine.includes('uploaded') || lowerLine.includes('uploading')) typeClass = 'log-info';
             
             html += `<div class="log-line ${typeClass}">${line}</div>`;
         });
@@ -162,10 +251,8 @@
     }
 
     function clearLogs() {
-        if (activeTaskId && tasksData[activeTaskId]) {
-            tasksData[activeTaskId].logs = [];
-            renderLogs(tasksData[activeTaskId]);
-        }
+        const container = document.getElementById('log-content');
+        container.innerHTML = '<div class="text-slate-600 italic font-mono">Logs cleared by user...</div>';
     }
 </script>
 {% endblock %}
