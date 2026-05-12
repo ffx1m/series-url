@@ -76,6 +76,7 @@
 <script>
     let activeTaskId = null;
     let tasksData = {};
+    const cancelingTasks = new Set();
 
     document.addEventListener('DOMContentLoaded', () => {
         updateTasks();
@@ -97,14 +98,22 @@
         const activeContainer = document.getElementById('active-list');
         const historyContainer = document.getElementById('history-list');
         const logSection = document.getElementById('log-section');
-        
+
         const allTids = Object.keys(tasks).sort((a, b) => {
             if (tasks[a].status === 'processing' && tasks[b].status !== 'processing') return -1;
             if (tasks[a].status !== 'processing' && tasks[b].status === 'processing') return 1;
             return b.localeCompare(a);
         });
 
-        const processingTids = allTids.filter(tid => tasks[tid].status === 'processing');
+        const processingTids = allTids.filter(tid => {
+            const isProcessing = tasks[tid].status === 'processing';
+            // Cleanup: if it's in canceling set but no longer processing in backend, remove it
+            if (!isProcessing) {
+                cancelingTasks.delete(tid);
+            }
+            return isProcessing;
+        });
+
         const historyTids = allTids.filter(tid => tasks[tid].status !== 'processing').slice(0, 12);
 
         if (processingTids.length > 0) {
@@ -112,31 +121,42 @@
             processingTids.forEach(tid => {
                 const task = tasks[tid];
                 const isActive = tid === activeTaskId;
+
+                // Optimistic UI for cancellation
+                const isCanceling = cancelingTasks.has(tid);
+
+                const statusText = isCanceling ? 'กำลังส่งคำขอยกเลิก...' : (task.message || 'กำลังประมวลผล...');
+                const statusColor = isCanceling ? 'text-orange-400' : 'text-slate-400';
+                const progressColor = isCanceling ? 'from-orange-600 to-orange-400' : 'from-blue-600 to-blue-400';
+                const buttonClass = isCanceling 
+                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed border-slate-700' 
+                    : 'bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border-red-500/20';
+
                 activeHtml += `
                     <div onclick="selectTask('${tid}')" class="glass-panel p-5 rounded-2xl border ${isActive ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'} cursor-pointer hover:border-white/20 transition-all shadow-lg relative group/card">
                         <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                             <div class="flex items-center gap-4">
-                                <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
-                                    <i class="fa-solid ${task.type === 'video' ? 'fa-video' : 'fa-image'} text-xl"></i>
+                                <div class="w-12 h-12 rounded-xl ${isCanceling ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'} flex items-center justify-center shrink-0">
+                                    <i class="fa-solid ${isCanceling ? 'fa-spinner fa-spin' : (task.type === 'video' ? 'fa-video' : 'fa-image')} text-xl"></i>
                                 </div>
                                 <div class="min-w-0">
                                     <h4 class="font-bold text-white truncate text-lg">${task.name || 'กำลังประมวลผล...'}</h4>
-                                    <p class="text-sm text-slate-400">${task.message}</p>
+                                    <p class="text-sm ${statusColor}">${statusText}</p>
                                 </div>
                             </div>
                             <div class="flex items-center gap-4 sm:min-w-[250px]">
                                 <div class="flex-1">
                                     <div class="flex justify-between mb-1">
                                         <span class="text-[10px] font-bold text-slate-500 uppercase">Progress</span>
-                                        <span class="text-xs font-bold text-blue-400">${task.progress}</span>
+                                        <span class="text-xs font-bold ${isCanceling ? 'text-orange-400' : 'text-blue-400'}">${task.progress}</span>
                                     </div>
                                     <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                        <div class="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-500" style="width: ${task.progress}"></div>
+                                        <div class="h-full bg-gradient-to-r ${progressColor} transition-all duration-500" style="width: ${task.progress}"></div>
                                     </div>
                                 </div>
                                 <!-- Cancel Button -->
-                                <button onclick="event.stopPropagation(); requestCancel('${tid}')" class="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-3 py-2 rounded-lg border border-red-500/20 transition-all text-xs font-bold shrink-0 flex items-center gap-2">
-                                    <i class="fa-solid fa-xmark"></i> ยกเลิก
+                                <button ${isCanceling ? 'disabled' : ''} onclick="event.stopPropagation(); requestCancel('${tid}')" class="${buttonClass} px-3 py-2 rounded-lg border transition-all text-xs font-bold shrink-0 flex items-center gap-2">
+                                    <i class="fa-solid ${isCanceling ? 'fa-hourglass-half' : 'fa-xmark'}"></i> ${isCanceling ? 'ยกเลิกอยู่...' : 'ยกเลิก'}
                                 </button>
                             </div>
                         </div>
@@ -144,7 +164,7 @@
                 `;
             });
             activeContainer.innerHTML = activeHtml;
-            
+
             if (!activeTaskId) {
                 selectTask(processingTids[0]);
             }
@@ -157,8 +177,7 @@
                     <p class="text-slate-500 font-medium">ยังไม่มีงานที่กำลังประมวลผลในขณะนี้</p>
                 </div>
             `;
-            if (activeTaskId && tasks[activeTaskId] && tasks[activeTaskId].status !== 'processing') {
-            } else {
+            if (!(activeTaskId && tasks[activeTaskId] && tasks[activeTaskId].status !== 'processing')) {
                 logSection.classList.add('hidden');
                 activeTaskId = null;
             }
@@ -188,6 +207,7 @@
         historyContainer.innerHTML = historyHtml || '<p class="text-slate-600 text-sm italic px-2">ยังไม่มีประวัติการทำงาน</p>';
 
         if (activeTaskId && tasks[activeTaskId]) {
+            updateLogHeader(tasks[activeTaskId]);
             renderLogs(tasks[activeTaskId]);
         }
     }
@@ -197,22 +217,31 @@
         const task = tasksData[tid];
         if (task) {
             document.getElementById('log-section').classList.remove('hidden');
-            document.getElementById('active-task-name').textContent = task.name || tid;
-            document.getElementById('active-task-status').textContent = task.status.toUpperCase();
-            
-            const statusEl = document.getElementById('active-task-status');
+            updateLogHeader(task);
+            renderLogs(task, true);
+        }
+    }
+
+    function updateLogHeader(task) {
+        const isCanceling = cancelingTasks.has(task.task_id);
+        document.getElementById('active-task-name').textContent = task.name || task.task_id;
+        const statusEl = document.getElementById('active-task-status');
+
+        if (isCanceling) {
+            statusEl.textContent = 'CANCELING';
+            statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold uppercase';
+        } else {
+            statusEl.textContent = task.status.toUpperCase();
             if (task.status === 'completed') statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase';
             else if (task.status === 'error') statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold uppercase';
             else statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold uppercase';
-            
-            renderLogs(task, true);
         }
     }
 
     function renderLogs(task, forceScroll = false) {
         const container = document.getElementById('log-content');
         const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
-        
+
         if (!task.logs || task.logs.length === 0) {
             container.innerHTML = `<div class="text-slate-600 italic">กำลังรอ Log จากระบบ...</div>`;
             return;
@@ -225,12 +254,12 @@
             if (lowerLine.includes('error')) typeClass = 'log-error';
             else if (lowerLine.includes('successfully') || lowerLine.includes('completed')) typeClass = 'log-success';
             else if (lowerLine.includes('starting') || lowerLine.includes('uploaded') || lowerLine.includes('uploading')) typeClass = 'log-info';
-            
+
             html += `<div class="log-line ${typeClass}">${line}</div>`;
         });
-        
+
         container.innerHTML = html;
-        
+
         if (forceScroll || wasAtBottom) {
             container.scrollTop = container.scrollHeight;
         }
@@ -238,7 +267,11 @@
 
     async function requestCancel(tid) {
         if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการยกเลิกงานนี้?')) return;
-        
+
+        // Optimistic UI: Add to canceling set immediately
+        cancelingTasks.add(tid);
+        renderAll(tasksData);
+
         try {
             const res = await fetch(`/api/task/${tid}/cancel`, { method: 'POST' });
             if (res.ok) {
@@ -246,10 +279,15 @@
                 updateTasks();
             } else {
                 showToast('ไม่สามารถยกเลิกงานได้', true);
+                cancelingTasks.delete(tid);
+                renderAll(tasksData);
             }
         } catch (e) {
             showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', true);
+            cancelingTasks.delete(tid);
+            renderAll(tasksData);
         }
     }
 </script>
 {% endblock %}
+
