@@ -2,16 +2,59 @@ import json
 import os
 import boto3
 from botocore.exceptions import ClientError
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
 
 CONFIG_FILE = 'data/config.json'
 
+# MongoDB Setup
+MONGODB_URI = os.environ.get('MONGODB_URI')
+db = None
+if MONGODB_URI:
+    try:
+        client = MongoClient(MONGODB_URI, server_api=ServerApi('1'))
+        # Use 'url_series' as the database name
+        db = client.get_database('url_series')
+    except Exception as e:
+        print(f"MongoDB Connection Error: {e}")
+
 def load_config():
+    # 1. Try MongoDB first
+    if db is not None:
+        try:
+            config = db.settings.find_one({'type': 'config'})
+            if config:
+                # Remove MongoDB internal ID
+                config_data = dict(config)
+                config_data.pop('_id', None)
+                config_data.pop('type', None)
+                return config_data
+        except Exception as e:
+            print(f"Error loading config from MongoDB: {e}")
+
+    # 2. Fallback to file
     if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return {}
     return {}
 
 def save_config(config_data):
+    # 1. Save to MongoDB
+    if db is not None:
+        try:
+            # We use type: config to identify the single config document
+            db.settings.update_one(
+                {'type': 'config'},
+                {'$set': config_data},
+                upsert=True
+            )
+        except Exception as e:
+            print(f"Error saving config to MongoDB: {e}")
+
+    # 2. Save to file (backward compatibility/local development)
     os.makedirs('data', exist_ok=True)
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config_data, f)

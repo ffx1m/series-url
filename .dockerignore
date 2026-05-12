@@ -1,0 +1,16 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.db
+.venv
+env/
+venv/
+data/config.json
+data/uploads/*
+test_subs.py
+README.md
+GEMINI.md
+.geminiignore

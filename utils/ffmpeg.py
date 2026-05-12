@@ -4,10 +4,27 @@ import threading
 import uuid
 import shutil
 import re
-from utils.r2 import upload_file_to_r2, load_config
+from utils.r2 import upload_file_to_r2, load_config, db
 
-# Store global task statuses
+# Store global task statuses (In-memory for fast access, but mirrored to MongoDB)
 tasks = {}
+
+def update_task_status(task_id, update_data):
+    # Update memory
+    if task_id not in tasks:
+        tasks[task_id] = {}
+    tasks[task_id].update(update_data)
+
+    # Update MongoDB
+    if db is not None:
+        try:
+            db.tasks.update_one(
+                {'task_id': task_id},
+                {'$set': tasks[task_id]},
+                upsert=True
+            )
+        except Exception as e:
+            print(f"Error updating task in MongoDB: {e}")
 
 def get_video_duration(m3u8_url):
     try:
@@ -33,7 +50,8 @@ def time_to_seconds(time_str):
 
 def start_video_conversion(series_name, ep_name, m3u8_url):
     task_id = str(uuid.uuid4())
-    tasks[task_id] = {
+    task_data = {
+        'task_id': task_id,
         'status': 'processing', 
         'progress': '0%', 
         'message': 'กำลังดึงข้อมูลความยาววิดีโอ...', 
@@ -41,7 +59,8 @@ def start_video_conversion(series_name, ep_name, m3u8_url):
         'logs': [],
         'name': f"{series_name} - {ep_name}"
     }
-    
+    update_task_status(task_id, task_data)
+
     thread = threading.Thread(target=_process_video_task, args=(task_id, series_name, ep_name, m3u8_url))
     thread.start()
     return task_id
@@ -50,13 +69,13 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
     try:
         tmp_dir = f"data/tmp_{task_id}"
         os.makedirs(tmp_dir, exist_ok=True)
-        
+
         output_m3u8 = os.path.join(tmp_dir, "playlist.m3u8")
-        
+
         # Get duration for progress calculation
         total_duration = get_video_duration(m3u8_url)
-        tasks[task_id]['message'] = 'กำลังดาวน์โหลดและแปลงไฟล์ด้วย FFmpeg...'
-        
+        update_task_status(task_id, {'message': 'กำลังดาวน์โหลดและแปลงไฟล์ด้วย FFmpeg...'})
+
         cmd = [
             'ffmpeg', '-y', '-i', m3u8_url,
             '-c:v', 'libx264',
@@ -77,58 +96,74 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
             '-start_number', '0',
             output_m3u8
         ]
-        
+
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-        
+
         # Regex to find time=HH:MM:SS.ms
         time_regex = re.compile(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})")
-        
+
         current_progress_val = 0
-        
+        task_logs = []
+
         for line in process.stdout:
             # Store logs
-            tasks[task_id]['logs'].append(line.strip())
-            if len(tasks[task_id]['logs']) > 100:
-                tasks[task_id]['logs'].pop(0)
+            task_logs.append(line.strip())
+            if len(task_logs) > 100:
+                task_logs.pop(0)
 
             match = time_regex.search(line)
+            status_update = {'logs': task_logs}
+
             if match and total_duration > 0:
                 current_time = time_to_seconds(match.group(1))
                 percent = min(100, int((current_time / total_duration) * 100))
                 # FFmpeg phase represents 50% of the total task
                 overall_percent = int(percent / 2)
-                
+
                 # Prevent progress from going backwards
                 if overall_percent > current_progress_val:
                     current_progress_val = overall_percent
-                    tasks[task_id]['progress'] = f"{current_progress_val}%"
-                    tasks[task_id]['message'] = f"กำลังแปลงไฟล์วิดีโอ... ({percent}%)"
+                    status_update['progress'] = f"{current_progress_val}%"
+                    status_update['message'] = f"กำลังแปลงไฟล์วิดีโอ... ({percent}%)"
+                    update_task_status(task_id, status_update)
             elif 'frame=' in line:
                 # Fallback if no duration: start at 5% and stay until actual progress takes over
                 if current_progress_val < 5:
                     current_progress_val = 5
-                    tasks[task_id]['progress'] = '5%'
-                    tasks[task_id]['message'] = 'กำลังดึงข้อมูลและเริ่มการแปลงวิดีโอ...'
-        
+                    status_update['progress'] = '5%'
+                    status_update['message'] = 'กำลังดึงข้อมูลและเริ่มการแปลงวิดีโอ...'
+                    update_task_status(task_id, status_update)
+            else:
+                # Just update logs periodically
+                if len(task_logs) % 10 == 0:
+                    update_task_status(task_id, status_update)
+
         process.wait()
-        
+
         if process.returncode != 0:
-            tasks[task_id]['status'] = 'error'
-            tasks[task_id]['message'] = 'FFmpeg process failed. ตรวจสอบ URL หรือความสมบูรณ์ของไฟล์ต้นทาง'
+            update_task_status(task_id, {
+                'status': 'error',
+                'message': 'FFmpeg process failed. ตรวจสอบ URL หรือความสมบูรณ์ของไฟล์ต้นทาง',
+                'logs': task_logs
+            })
             shutil.rmtree(tmp_dir, ignore_errors=True)
             return
-            
-        tasks[task_id]['message'] = 'กำลังอัพโหลดไฟล์ขึ้นสู่ Cloudflare R2...'
-        tasks[task_id]['progress'] = '50%'
-        tasks[task_id]['logs'].append("Starting upload to R2...")
-        
+
+        update_task_status(task_id, {
+            'message': 'กำลังอัพโหลดไฟล์ขึ้นสู่ Cloudflare R2...',
+            'progress': '50%',
+            'logs': task_logs + ["Starting upload to R2..."]
+        })
+
         # Upload files in tmp_dir to R2
         files_to_upload = [f for f in os.listdir(tmp_dir) if f.endswith('.ts') or f.endswith('.m3u8')]
         total_files = len(files_to_upload)
-        
+
         if total_files == 0:
-            tasks[task_id]['status'] = 'error'
-            tasks[task_id]['message'] = 'ไม่พบไฟล์ที่จะอัพโหลด อาจเกิดข้อผิดพลาดในการแปลงไฟล์'
+            update_task_status(task_id, {
+                'status': 'error',
+                'message': 'ไม่พบไฟล์ที่จะอัพโหลด อาจเกิดข้อผิดพลาดในการแปลงไฟล์'
+            })
             shutil.rmtree(tmp_dir, ignore_errors=True)
             return
 
@@ -136,38 +171,48 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
             local_path = os.path.join(tmp_dir, filename)
             s3_key = f"series/{series_name}/{ep_name}/{filename}"
             content_type = 'application/vnd.apple.mpegurl' if filename.endswith('.m3u8') else 'video/MP2T'
-            
+
             upload_file_to_r2(local_path, s3_key, content_type=content_type)
-            tasks[task_id]['logs'].append(f"Uploaded: {filename}")
-            if len(tasks[task_id]['logs']) > 100: tasks[task_id]['logs'].pop(0)
-            
+
+            # Update logs and progress
+            task_logs.append(f"Uploaded: {filename}")
+            if len(task_logs) > 100: task_logs.pop(0)
+
             # Upload phase represents 50% to 100%
             percent = 50 + int(((idx + 1) / total_files) * 50)
-            tasks[task_id]['progress'] = f"{percent}%"
-            tasks[task_id]['message'] = f"อัพโหลดไฟล์ {idx+1}/{total_files} ชิ้น"
-            
+            update_task_status(task_id, {
+                'progress': f"{percent}%",
+                'message': f"อัพโหลดไฟล์ {idx+1}/{total_files} ชิ้น",
+                'logs': task_logs
+            })
+
         # Cleanup
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        
+
         config = load_config()
         domain = config.get('worker_domain', 'https://series.film01-thirx.workers.dev').rstrip('/')
         final_url = f"{domain}/series/{series_name}/{ep_name}/playlist.m3u8"
-        
-        tasks[task_id]['status'] = 'completed'
-        tasks[task_id]['progress'] = '100%'
-        tasks[task_id]['message'] = 'เสร็จสิ้นกระบวนการทั้งหมด!'
-        tasks[task_id]['result_url'] = final_url
-        tasks[task_id]['logs'].append("Task completed successfully.")
-        
+
+        task_logs.append("Task completed successfully.")
+        update_task_status(task_id, {
+            'status': 'completed',
+            'progress': '100%',
+            'message': 'เสร็จสิ้นกระบวนการทั้งหมด!',
+            'result_url': final_url,
+            'logs': task_logs
+        })
+
     except Exception as e:
-        tasks[task_id]['status'] = 'error'
-        tasks[task_id]['message'] = str(e)
-        tasks[task_id]['logs'].append(f"Error: {str(e)}")
+        update_task_status(task_id, {
+            'status': 'error',
+            'message': str(e)
+        })
 
 
 def start_image_conversion(series_name, input_image_path):
     task_id = str(uuid.uuid4())
-    tasks[task_id] = {
+    task_data = {
+        'task_id': task_id,
         'status': 'processing', 
         'progress': '10%', 
         'message': 'กำลังเริ่มแปลงรูปภาพ...', 
@@ -175,7 +220,8 @@ def start_image_conversion(series_name, input_image_path):
         'logs': [],
         'name': f"Image for {series_name}"
     }
-    
+    update_task_status(task_id, task_data)
+
     thread = threading.Thread(target=_process_image_task, args=(task_id, series_name, input_image_path))
     thread.start()
     return task_id
@@ -183,10 +229,13 @@ def start_image_conversion(series_name, input_image_path):
 def _process_image_task(task_id, series_name, input_image_path):
     try:
         output_webp = f"{input_image_path}.webp"
-        
-        tasks[task_id]['message'] = 'กำลังบีบอัดรูปภาพด้วย WebP...'
-        tasks[task_id]['progress'] = '30%'
-        
+        task_logs = []
+
+        update_task_status(task_id, {
+            'message': 'กำลังบีบอัดรูปภาพด้วย WebP...',
+            'progress': '30%'
+        })
+
         cmd = [
             'ffmpeg', '-y', '-i', input_image_path,
             '-c:v', 'libwebp',
@@ -195,56 +244,101 @@ def _process_image_task(task_id, series_name, input_image_path):
             '-preset', 'picture',
             output_webp
         ]
-        
+
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         for line in process.stdout:
-            tasks[task_id]['logs'].append(line.strip())
-            if len(tasks[task_id]['logs']) > 100: tasks[task_id]['logs'].pop(0)
-        
+            task_logs.append(line.strip())
+            if len(task_logs) > 100: task_logs.pop(0)
+
         process.wait()
-        
+
         if process.returncode != 0:
-            tasks[task_id]['status'] = 'error'
-            tasks[task_id]['message'] = 'FFmpeg image conversion failed.'
+            update_task_status(task_id, {
+                'status': 'error',
+                'message': 'FFmpeg image conversion failed.',
+                'logs': task_logs
+            })
             return
-            
-        tasks[task_id]['progress'] = '70%'
-        tasks[task_id]['message'] = 'กำลังอัพโหลดรูปภาพขึ้น Cloudflare R2...'
-        
+
+        update_task_status(task_id, {
+            'progress': '70%',
+            'message': 'กำลังอัพโหลดรูปภาพขึ้น Cloudflare R2...',
+            'logs': task_logs
+        })
+
         filename = os.path.basename(input_image_path).split('.')[0] + ".webp"
         s3_key = f"series/{series_name}/{filename}"
-        
+
         upload_success = upload_file_to_r2(output_webp, s3_key, content_type='image/webp')
-        tasks[task_id]['logs'].append(f"Uploaded to R2: {s3_key}")
-        
+        task_logs.append(f"Uploaded to R2: {s3_key}")
+
         # Cleanup
         try: os.remove(input_image_path)
         except: pass
         try: os.remove(output_webp)
         except: pass
-        
+
         if not upload_success:
-            tasks[task_id]['status'] = 'error'
-            tasks[task_id]['message'] = 'ล้มเหลวในการอัพโหลดไปยัง R2 ตรวจสอบการตั้งค่า API'
+            update_task_status(task_id, {
+                'status': 'error',
+                'message': 'ล้มเหลวในการอัพโหลดไปยัง R2 ตรวจสอบการตั้งค่า API',
+                'logs': task_logs
+            })
             return
-            
+
         config = load_config()
         domain = config.get('worker_domain', 'https://series.film01-thirx.workers.dev').rstrip('/')
         final_url = f"{domain}/{s3_key}"
-        
-        tasks[task_id]['status'] = 'completed'
-        tasks[task_id]['progress'] = '100%'
-        tasks[task_id]['message'] = 'อัพโหลดและแปลงรูปภาพสำเร็จ!'
-        tasks[task_id]['result_url'] = final_url
-        tasks[task_id]['logs'].append("Task completed successfully.")
-        
+
+        task_logs.append("Task completed successfully.")
+        update_task_status(task_id, {
+            'status': 'completed',
+            'progress': '100%',
+            'message': 'อัพโหลดและแปลงรูปภาพสำเร็จ!',
+            'result_url': final_url,
+            'logs': task_logs
+        })
+
     except Exception as e:
-        tasks[task_id]['status'] = 'error'
-        tasks[task_id]['message'] = str(e)
-        tasks[task_id]['logs'].append(f"Error: {str(e)}")
+        update_task_status(task_id, {
+            'status': 'error',
+            'message': str(e)
+        })
 
 def get_task_status(task_id):
-    return tasks.get(task_id, {'status': 'not_found'})
+    # Try memory first
+    if task_id in tasks:
+        return tasks[task_id]
+
+    # Fallback to MongoDB
+    if db is not None:
+        try:
+            task = db.tasks.find_one({'task_id': task_id})
+            if task:
+                task_data = dict(task)
+                task_data.pop('_id', None)
+                tasks[task_id] = task_data # Cache it
+                return task_data
+        except Exception as e:
+            print(f"Error fetching task from MongoDB: {e}")
+
+    return {'status': 'not_found'}
 
 def get_all_tasks():
-    return tasks
+    # Merge memory and MongoDB
+    all_tasks = dict(tasks)
+
+    if db is not None:
+        try:
+            # Get last 50 tasks from MongoDB
+            db_tasks = db.tasks.find().sort('_id', -1).limit(50)
+            for task in db_tasks:
+                tid = task.get('task_id')
+                if tid and tid not in all_tasks:
+                    task_data = dict(task)
+                    task_data.pop('_id', None)
+                    all_tasks[tid] = task_data
+        except Exception as e:
+            print(f"Error fetching all tasks from MongoDB: {e}")
+
+    return all_tasks

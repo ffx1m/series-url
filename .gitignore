@@ -1,4 +1,9 @@
 data/config.json
+data/uploads/*
+test_subs.py
+__pycache__/
+*.pyc
+.env
 data/uploads/
 __pycache__/
 *.pyc
