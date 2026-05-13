@@ -150,14 +150,15 @@
             const bgClass = isError ? 'bg-red-600/90' : 'bg-emerald-600/90';
             const icon = isError ? 'fa-circle-exclamation' : 'fa-check-circle';
             
-            toast.className = `fixed top-6 right-6 ${bgClass} backdrop-blur-md border border-white/10 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 z-50 flex items-center gap-3 transform translate-y-0 opacity-100`;
+            toast.className = `fixed top-20 left-1/2 -translate-x-1/2 ${bgClass} backdrop-blur-md border border-white/10 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 z-50 flex items-center gap-3 opacity-100`;
+            toast.style.transform = 'translateX(-50%) translateY(0)';
             toast.innerHTML = `<i class="fa-solid ${icon} text-xl"></i><span class="font-medium">${message}</span>`;
             
             document.body.appendChild(toast);
             
             setTimeout(() => {
                 toast.style.opacity = '0';
-                toast.style.transform = 'translateY(-10px)';
+                toast.style.transform = 'translateX(-50%) translateY(-10px)';
                 setTimeout(() => toast.remove(), 300);
             }, 3000);
         }

@@ -113,12 +113,17 @@ def get_cloudflare_stats():
             elif action in class_b_types: r2_class_b += reqs
             
         # Parse Workers based on Plan
+        worker_requests = 0
         if worker_plan == "paid":
-            worker_requests = account_data.get('workersMonthly', [{}])[0].get('sum', {}).get('requests', 0)
+            workers_data = account_data.get('workersMonthly', [])
+            if workers_data:
+                worker_requests = workers_data[0].get('sum', {}).get('requests', 0)
             worker_limit = 10000000
             worker_label = "Monthly Invocations"
         else:
-            worker_requests = account_data.get('workersDaily', [{}])[0].get('sum', {}).get('requests', 0)
+            workers_data = account_data.get('workersDaily', [])
+            if workers_data:
+                worker_requests = workers_data[0].get('sum', {}).get('requests', 0)
             worker_limit = 100000
             worker_label = "Daily Invocations"
             
