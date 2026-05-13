@@ -13,37 +13,48 @@ running_processes = {}
 # Global lock to ensure only one heavy task starts at a time
 task_lock = threading.Lock()
 
-def update_task_status(task_id, update_data):
-    # Update memory
+def update_task_status(task_id, update_data, force_db=False):
+    # Update memory (Fastest)
     if task_id not in tasks:
         tasks[task_id] = {}
+    
+    # Save old status to check for changes
+    old_status = tasks[task_id].get('status')
     tasks[task_id].update(update_data)
+    new_status = tasks[task_id].get('status')
 
-    # Update MongoDB
+    # Update MongoDB (With throttling to prevent lag)
     from utils.r2 import db
     if db is not None:
         try:
-            # Get current task type from memory
-            task_type = tasks.get(task_id, {}).get('type')
-            status = update_data.get('status')
-
+            task_type = tasks[task_id].get('type')
+            
             # AUTO-CLEANUP logic:
             # 1. Always delete if canceled
             # 2. Delete video tasks if completed (original behavior)
             # 3. KEEP image tasks if completed (so UI can get the result_url)
-            should_delete = (status == 'canceled') or (status == 'completed' and task_type == 'video')
-
+            should_delete = (new_status == 'canceled') or (new_status == 'completed' and task_type == 'video')
+            
             if should_delete:
                 db.tasks.delete_one({'task_id': task_id})
                 if task_id in tasks:
                     del tasks[task_id]
                 return
 
-            db.tasks.update_one(
-                {'task_id': task_id},
-                {'$set': tasks[task_id]},
-                upsert=True
-            )
+            # Throttling: Only write to DB if significant change or routine interval
+            is_significant = force_db or (old_status != new_status) or ('progress' in update_data)
+            
+            if is_significant or (len(tasks[task_id].get('logs', [])) % 20 == 0):
+                def perform_db_update(tid, data):
+                    try:
+                        db.tasks.update_one({'task_id': tid}, {'$set': data}, upsert=True)
+                    except: pass
+                
+                if is_significant:
+                    db.tasks.update_one({'task_id': task_id}, {'$set': tasks[task_id]}, upsert=True)
+                else:
+                    threading.Thread(target=perform_db_update, args=(task_id, tasks[task_id]), daemon=True).start()
+
         except Exception as e:
             print(f"Error updating task in MongoDB: {e}")
 
@@ -59,7 +70,7 @@ def cancel_task(task_id):
     update_task_status(task_id, {
         'status': 'canceled',
         'message': 'งานถูกยกเลิกโดยผู้ใช้'
-    })
+    }, force_db=True)
     return True
 
 # --- Queue System ---
@@ -136,7 +147,7 @@ def start_video_conversion(series_name, ep_name, m3u8_url):
         tasks[task_id] = task_data
         return task_id
 
-    update_task_status(task_id, task_data)
+    update_task_status(task_id, task_data, force_db=True)
     return task_id
 
 def _process_video_task(task_id, series_name, ep_name, m3u8_url):
@@ -146,13 +157,13 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
         update_task_status(task_id, {
             'status': 'processing',
             'message': 'กำลังเริ่มประมวลผล...'
-        })
+        }, force_db=True)
         
         tmp_dir = f"data/tmp_{task_id}"
         os.makedirs(tmp_dir, exist_ok=True)
         output_m3u8 = os.path.join(tmp_dir, "playlist.m3u8")
         total_duration = get_video_duration(m3u8_url)
-        update_task_status(task_id, {'message': 'กำลังดาวน์โหลดและแปลงไฟล์ด้วย FFmpeg...'})
+        update_task_status(task_id, {'message': 'กำลังวิเคราะห์วิดีโอและเริ่มแปลงไฟล์...'})
 
         cmd = [
             'ffmpeg', '-y', '-i', m3u8_url,
@@ -168,32 +179,39 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         running_processes[task_id] = process
-        time_regex = re.compile(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})")
+        
+        # Enhanced regex to capture frame, fps, and speed
+        progress_regex = re.compile(r"frame=\s*(\d+)\s+fps=\s*([\d.]+).*time=(\d{2}:\d{2}:\d{2}\.\d{2}).*speed=\s*([\d.]+x)")
+        
         current_progress_val = 0
         task_logs = []
 
         for line in process.stdout:
-            task_logs.append(line.strip())
+            line = line.strip()
+            if not line: continue
+            task_logs.append(line)
             if len(task_logs) > 100: task_logs.pop(0)
-            match = time_regex.search(line)
+            
+            match = progress_regex.search(line)
             status_update = {'logs': task_logs}
+            
             if match and total_duration > 0:
-                current_time = time_to_seconds(match.group(1))
+                frame = match.group(1)
+                time_str = match.group(3)
+                speed = match.group(4)
+                
+                current_time = time_to_seconds(time_str)
                 percent = min(100, int((current_time / total_duration) * 100))
                 overall_percent = int(percent * 0.85)
-                if overall_percent > current_progress_val:
+                
+                if overall_percent > current_progress_val or len(task_logs) % 10 == 0:
                     current_progress_val = overall_percent
                     status_update['progress'] = f"{current_progress_val}%"
-                    status_update['message'] = f"กำลังแปลงไฟล์วิดีโอ... {percent}%"
-                    update_task_status(task_id, status_update)
-            elif 'frame=' in line:
-                if current_progress_val < 5:
-                    current_progress_val = 5
-                    status_update['progress'] = '5%'
-                    status_update['message'] = 'กำลังเริ่มประมวลผลวิดีโอ...'
+                    status_update['message'] = f"กำลังแปลงวิดีโอ: {percent}% (เฟรม: {frame}, ความเร็ว: {speed})"
                     update_task_status(task_id, status_update)
             else:
-                if len(task_logs) % 15 == 0: update_task_status(task_id, status_update)
+                if len(task_logs) % 15 == 0:
+                    update_task_status(task_id, status_update)
 
         process.wait()
         if task_id in running_processes: del running_processes[task_id]
@@ -206,34 +224,44 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
                 'status': 'error',
                 'message': 'FFmpeg ล้มเหลว! กรุณาตรวจสอบ URL วิดีโอต้นทาง',
                 'logs': task_logs
-            })
+            }, force_db=True)
             shutil.rmtree(tmp_dir, ignore_errors=True)
             return
 
+        # Byte-based upload progress
+        files_to_upload = [f for f in os.listdir(tmp_dir) if f.endswith('.ts') or f.endswith('.m3u8')]
+        total_bytes = sum(os.path.getsize(os.path.join(tmp_dir, f)) for f in files_to_upload)
+        bytes_uploaded = 0
+        
         update_task_status(task_id, {
             'message': 'การแปลงไฟล์เสร็จสิ้น กำลังเริ่มอัพโหลด...',
             'progress': '85%',
             'logs': task_logs + ["Starting upload to R2..."]
-        })
+        }, force_db=True)
 
-        files_to_upload = [f for f in os.listdir(tmp_dir) if f.endswith('.ts') or f.endswith('.m3u8')]
-        total_files = len(files_to_upload)
-        if total_files == 0:
-            update_task_status(task_id, {'status': 'error', 'message': 'ไม่พบไฟล์ที่จะอัพโหลด'})
+        if not files_to_upload:
+            update_task_status(task_id, {'status': 'error', 'message': 'ไม่พบไฟล์ที่จะอัพโหลด'}, force_db=True)
             shutil.rmtree(tmp_dir, ignore_errors=True)
             return
 
-        for idx, filename in enumerate(files_to_upload):
+        for filename in files_to_upload:
             local_path = os.path.join(tmp_dir, filename)
+            file_size = os.path.getsize(local_path)
             s3_key = f"series/{series_name}/{ep_name}/{filename}"
             content_type = 'application/vnd.apple.mpegurl' if filename.endswith('.m3u8') else 'video/MP2T'
+            
             upload_file_to_r2(local_path, s3_key, content_type=content_type)
-            task_logs.append(f"Uploaded: {filename}")
+            
+            bytes_uploaded += file_size
+            task_logs.append(f"Uploaded: {filename} ({round(file_size/1024, 1)} KB)")
             if len(task_logs) > 100: task_logs.pop(0)
-            percent = 85 + int(((idx + 1) / total_files) * 15)
+            
+            upload_percent = (bytes_uploaded / total_bytes) if total_bytes > 0 else 1
+            overall_percent = 85 + int(upload_percent * 15)
+            
             update_task_status(task_id, {
-                'progress': f"{percent}%",
-                'message': f"กำลังอัพโหลด: {filename} ({idx+1}/{total_files})",
+                'progress': f"{overall_percent}%",
+                'message': f"กำลังอัพโหลด: {round(bytes_uploaded/(1024*1024), 2)} MB / {round(total_bytes/(1024*1024), 2)} MB",
                 'logs': task_logs
             })
 
@@ -242,12 +270,11 @@ def _process_video_task(task_id, series_name, ep_name, m3u8_url):
             'status': 'completed',
             'progress': '100%',
             'message': 'สำเร็จ!'
-        })
+        }, force_db=True)
     except Exception as e:
-        update_task_status(task_id, {'status': 'error', 'message': str(e)})
+        update_task_status(task_id, {'status': 'error', 'message': str(e)}, force_db=True)
     finally:
         task_lock.release()
-
 
 def start_image_conversion(series_name, input_image_path):
     task_id = str(uuid.uuid4())
@@ -256,7 +283,7 @@ def start_image_conversion(series_name, input_image_path):
         'message': 'กำลังเริ่มแปลงรูปภาพ...', 'type': 'image', 'logs': [],
         'name': f"Image for {series_name}"
     }
-    update_task_status(task_id, task_data)
+    update_task_status(task_id, task_data, force_db=True)
     thread = threading.Thread(target=_process_image_task, args=(task_id, series_name, input_image_path))
     thread.start()
     return task_id
@@ -308,7 +335,6 @@ def _process_image_task(task_id, series_name, input_image_path):
             update_task_status(task_id, {'status': 'error', 'message': 'อัพโหลด R2 ไม่สำเร็จ'}, force_db=True)
             return
             
-        # Generate result URL for the UI to copy
         config = load_config()
         domain = config.get('worker_domain', 'https://series.film01-thirx.workers.dev')
         result_url = f"{domain}/{s3_key}"
@@ -337,22 +363,15 @@ def get_task_status(task_id):
     return {'status': 'not_found'}
 
 def get_all_tasks():
-    # Use memory as the source of truth for all live tasks
-    # This is much faster than querying MongoDB for every poll
     all_tasks_list = []
-    
-    # 1. Start with everything in memory (Processing, Completed Images, etc.)
-    # We copy the IDs first to avoid dictionary size change during iteration
     task_ids = list(tasks.keys())
     for tid in task_ids:
         if tid in tasks:
             all_tasks_list.append(tasks[tid])
     
-    # 2. Fetch from DB for anything NOT in memory (mostly Queued tasks or older Errors)
     from utils.r2 import db
     if db is not None:
         try:
-            # Only fetch tasks that aren't already in our memory list
             known_ids = [t['task_id'] for t in all_tasks_list]
             db_tasks = db.tasks.find({
                 'task_id': {'$nin': known_ids},
@@ -366,44 +385,9 @@ def get_all_tasks():
         except Exception as e:
             print(f"Error fetching tasks for Monitor: {e}")
     
-    # 3. Final Sort: By Status (Processing first) then try to maintain chronological order
-    # Since we lost the _id for memory tasks, we'll just ensure 'processing' is at top
     def sort_key(t):
         status_order = {'processing': 0, 'queued': 1, 'error': 2, 'completed': 3}
         return status_order.get(t.get('status'), 99)
         
     all_tasks_list.sort(key=sort_key)
     return all_tasks_list
-cessing', 'queued', 'error']}
-            }).sort('_id', 1)
-            
-            for task in db_tasks:
-                tid = task.get('task_id')
-                task_data = dict(task)
-                task_data.pop('_id', None)
-                
-                # If task is in memory, it's more "live" (e.g. current progress)
-                if tid in memory_tasks:
-                    ordered_tasks.append(memory_tasks[tid])
-                    del memory_tasks[tid] # Remove so we don't double count
-                else:
-                    ordered_tasks.append(task_data)
-        except Exception as e:
-            print(f"Error fetching tasks for Monitor: {e}")
-    
-    # Add any remaining memory tasks that weren't in DB (though they should be)
-    for tid in memory_tasks:
-        ordered_tasks.append(memory_tasks[tid])
-        
-    return ordered_tasks
-y_tasks[tid] # Remove so we don't double count
-                else:
-                    ordered_tasks.append(task_data)
-        except Exception as e:
-            print(f"Error fetching tasks for Monitor: {e}")
-    
-    # Add any remaining memory tasks that weren't in DB (though they should be)
-    for tid in memory_tasks:
-        ordered_tasks.append(memory_tasks[tid])
-        
-    return ordered_tasks
