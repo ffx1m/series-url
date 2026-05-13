@@ -54,6 +54,8 @@
 </style>
 
 <script>
+    let isPaused = false;
+
     document.addEventListener('DOMContentLoaded', () => {
         updateMonitor();
         setInterval(updateDBStatus, 10000); // Check DB status occasionally
@@ -61,6 +63,7 @@
     });
 
     async function updateMonitor() {
+        if (isPaused) return;
         try {
             const res = await fetch('/api/tasks');
             const tasks = await res.json();
@@ -169,14 +172,14 @@
             });
         }
 
-        // Render Failed (Simple replacement is fine here as it's static)
+        // Render Failed
         if (failedList.length === 0) {
             failedContainer.innerHTML = '';
             noFailed.classList.remove('hidden');
         } else {
             noFailed.classList.add('hidden');
             failedContainer.innerHTML = failedList.map(task => `
-                <div class="glass-panel p-5 rounded-xl border border-red-500/20 bg-red-500/5 flex items-center justify-between gap-4 mb-4">
+                <div class="glass-panel p-5 rounded-xl border border-red-500/20 bg-red-500/5 flex items-center justify-between gap-4 mb-4" id="failed-${task.task_id}">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400">
                             <i class="fa-solid fa-circle-exclamation text-xl"></i>
@@ -195,14 +198,28 @@
     }
 
     async function dismissTask(tid) {
+        // Optimistic UI: Hide immediately
+        const el = document.getElementById(`failed-${tid}`);
+        if (el) el.classList.add('hidden');
+        
+        // Pause polling
+        isPaused = true;
+        
         try {
             const res = await fetch(`/api/task/${tid}/delete`, { method: 'POST' });
             if (res.ok) {
                 showToast('ลบรายการที่ผิดพลาดแล้ว');
-                updateMonitor();
+            } else {
+                if (el) el.classList.remove('hidden');
             }
         } catch (e) {
             showToast('เกิดข้อผิดพลาดในการลบ', true);
+            if (el) el.classList.remove('hidden');
+        } finally {
+            setTimeout(() => {
+                isPaused = false;
+                updateMonitor();
+            }, 2000);
         }
     }
 

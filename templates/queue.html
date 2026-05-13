@@ -50,12 +50,15 @@
 </style>
 
 <script>
+    let isPaused = false;
+
     document.addEventListener('DOMContentLoaded', () => {
         updateQueue();
         setInterval(updateQueue, 2000);
     });
 
     async function updateQueue() {
+        if (isPaused) return;
         try {
             const res = await fetch('/api/tasks');
             const tasks = await res.json();
@@ -69,17 +72,15 @@
         const taskList = document.getElementById('task-list');
         const emptyState = document.getElementById('empty-queue');
         
-        // Filter: only show video tasks that are 'queued', 'processing', or 'error'
-        // 'completed' tasks will be filtered out (auto-dismissed)
-        const relevantTasks = Object.values(tasks)
+        const taskArray = Array.isArray(tasks) ? tasks : Object.values(tasks);
+        const relevantTasks = taskArray
             .filter(t => t.type === 'video' && (t.status === 'queued' || t.status === 'processing' || t.status === 'error'))
             .sort((a, b) => {
-                // Processing first, then queued by time, then error
                 if (a.status === 'processing' && b.status !== 'processing') return -1;
                 if (b.status === 'processing' && a.status !== 'processing') return 1;
                 if (a.status === 'error' && b.status !== 'error') return 1;
                 if (b.status === 'error' && a.status !== 'error') return -1;
-                return 0; // maintain original order for queued
+                return 0;
             });
 
         if (relevantTasks.length === 0) {
@@ -157,16 +158,29 @@
     async function deleteTask(tid) {
         if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้ออกจากรายการ?')) return;
         
+        // Optimistic UI: Hide immediately
+        const card = document.getElementById(`task-${tid}`);
+        if (card) card.classList.add('hidden');
+        
+        // Pause polling
+        isPaused = true;
+
         try {
             const res = await fetch(`/api/task/${tid}/delete`, { method: 'POST' });
             if (res.ok) {
                 showToast('ลบงานออกจากรายการแล้ว');
-                updateQueue();
             } else {
+                if (card) card.classList.remove('hidden');
                 showToast('ไม่สามารถลบงานได้', true);
             }
         } catch (e) {
+            if (card) card.classList.remove('hidden');
             showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', true);
+        } finally {
+            setTimeout(() => {
+                isPaused = false;
+                updateQueue();
+            }, 2000);
         }
     }
 </script>
