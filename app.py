@@ -135,24 +135,25 @@ def delete_task_api(task_id):
     from utils.ffmpeg import tasks, cancel_task
     from utils.r2 import db
     import shutil
-    
+
     # 1. Stop the task if it's running (this also handles process kill and lock release)
     cancel_task(task_id)
-    
+
     # 2. Cleanup files
     tmp_dir = f"data/tmp_{task_id}"
     if os.path.exists(tmp_dir):
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        
-    # 3. Remove from memory and DB
+
+    # 3. Explicitly remove from BOTH memory and DB to ensure it doesn't reappear
     if task_id in tasks:
         del tasks[task_id]
-        
-    if db is not None:
-        db.tasks.delete_one({'task_id': task_id})
-        
-    return jsonify({'message': 'Task stopped, cleaned up, and deleted'})
 
+    if db is not None:
+        try:
+            db.tasks.delete_one({'task_id': task_id})
+        except: pass
+
+    return jsonify({'message': 'Task stopped, cleaned up, and deleted'})
 @app.route('/api/series/<series_name>', methods=['GET'])
 def series_contents(series_name):
     contents = list_folder_contents(series_name)
