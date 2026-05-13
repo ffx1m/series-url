@@ -47,7 +47,7 @@
         font-family: 'JetBrains Mono', 'Fira Code', monospace;
         scrollbar-width: thin;
         scrollbar-color: #334155 transparent;
-        scroll-behavior: smooth;
+        /* Removed smooth scroll to make line jumps more readable */
     }
     .log-window::-webkit-scrollbar { width: 4px; }
     .log-window::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
@@ -57,7 +57,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         updateMonitor();
         setInterval(updateDBStatus, 10000); // Check DB status occasionally
-        setInterval(updateMonitor, 2000);
+        setInterval(updateMonitor, 1000); // Poll every 1 second
     });
 
     async function updateMonitor() {
@@ -76,58 +76,98 @@
         const noActive = document.getElementById('no-active-tasks');
         const noFailed = document.getElementById('no-failed-tasks');
         
-        const taskArray = Object.values(tasks);
+        const taskArray = Array.isArray(tasks) ? tasks : Object.values(tasks);
         const activeList = taskArray.filter(t => t.status === 'processing');
         const failedList = taskArray.filter(t => t.status === 'error');
 
-        // Render Active
+        // Handle Active Tasks
         if (activeList.length === 0) {
             activeContainer.innerHTML = '';
             noActive.classList.remove('hidden');
         } else {
             noActive.classList.add('hidden');
-            activeContainer.innerHTML = activeList.map(task => `
-                <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-blue-500 overflow-hidden relative">
-                    <div class="flex flex-col lg:flex-row gap-6">
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-3 mb-2">
-                                <h4 class="text-lg font-bold text-white truncate">${task.name}</h4>
-                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold animate-pulse">${task.status.toUpperCase()}</span>
-                            </div>
-                            <p class="text-sm text-slate-400 mb-4">${task.message}</p>
-                            
-                            <div class="space-y-2 mb-4">
-                                <div class="flex justify-between text-xs font-bold">
-                                    <span class="text-slate-500 uppercase">Progress</span>
-                                    <span class="text-blue-400">${task.progress}</span>
+            
+            // Surgically update or add task cards
+            activeList.forEach(task => {
+                let card = document.getElementById(`task-${task.task_id}`);
+                if (!card) {
+                    // Create new card if it doesn't exist
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = `
+                        <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-blue-500 overflow-hidden relative mb-4" id="task-${task.task_id}">
+                            <div class="flex flex-col lg:flex-row gap-6">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <h4 class="text-lg font-bold text-white truncate task-name">${task.name}</h4>
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold animate-pulse status-badge">${task.status.toUpperCase()}</span>
+                                    </div>
+                                    <p class="text-sm text-slate-400 mb-4 status-message">${task.message}</p>
+                                    
+                                    <div class="space-y-2 mb-4">
+                                        <div class="flex justify-between text-xs font-bold">
+                                            <span class="text-slate-500 uppercase">Progress</span>
+                                            <span class="text-blue-400 progress-text">${task.progress}</span>
+                                        </div>
+                                        <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                            <div class="h-full bg-blue-500 transition-all duration-1000 linear progress-bar" style="width: ${task.progress}"></div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                    <div class="h-full bg-blue-500 transition-all duration-1000 linear" style="width: ${task.progress}"></div>
+                                
+                                <div class="lg:w-1/2 flex flex-col">
+                                    <div class="text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-2">
+                                        <i class="fa-solid fa-terminal"></i> Live Output
+                                    </div>
+                                    <div class="log-window auto-scroll-log w-full bg-slate-950/80 rounded-xl p-4 text-[11px] text-slate-300 h-48 overflow-y-auto border border-white/5">
+                                        <div class="log-content"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="lg:w-1/2 flex flex-col">
-                            <div class="text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-2">
-                                <i class="fa-solid fa-terminal"></i> Live Output
-                            </div>
-                            <div class="log-window auto-scroll-log w-full bg-slate-950/80 rounded-xl p-4 text-[11px] text-slate-300 h-48 overflow-y-auto border border-white/5">
-                                ${task.logs && task.logs.length > 0 ? task.logs.map(log => `<div class="mb-1 opacity-80 hover:opacity-100">${log}</div>`).join('') : '<span class="text-slate-600">Waiting for logs...</span>'}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
+                    `;
+                    activeContainer.appendChild(tempDiv.firstElementChild);
+                    card = document.getElementById(`task-${task.task_id}`);
+                }
+
+                // Update Existing Card
+                card.querySelector('.status-message').innerText = task.message;
+                card.querySelector('.progress-text').innerText = task.progress;
+                card.querySelector('.progress-bar').style.width = task.progress;
+                
+                const logWin = card.querySelector('.log-window');
+                const logContent = card.querySelector('.log-content');
+                
+                // Sticky Scroll Logic
+                const isAtBottom = Math.abs(logWin.scrollHeight - logWin.clientHeight - logWin.scrollTop) < 50;
+                const newLogsHtml = task.logs && task.logs.length > 0 
+                    ? task.logs.map(log => `<div class="mb-1 opacity-80 hover:opacity-100">${log}</div>`).join('') 
+                    : '<span class="text-slate-600">Waiting for logs...</span>';
+                
+                if (logContent.innerHTML !== newLogsHtml) {
+                    logContent.innerHTML = newLogsHtml;
+                    if (isAtBottom) {
+                        logWin.scrollTop = logWin.scrollHeight;
+                    }
+                }
+            });
+
+            // Remove cards that are no longer active
+            Array.from(activeContainer.children).forEach(card => {
+                const taskId = card.id.replace('task-', '');
+                if (!activeList.find(t => t.task_id === taskId)) {
+                    card.remove();
+                }
+            });
         }
 
-        // Render Failed
+        // Render Failed (Simple replacement is fine here as it's static)
         if (failedList.length === 0) {
             failedContainer.innerHTML = '';
             noFailed.classList.remove('hidden');
         } else {
             noFailed.classList.add('hidden');
             failedContainer.innerHTML = failedList.map(task => `
-                <div class="glass-panel p-5 rounded-xl border border-red-500/20 bg-red-500/5 flex items-center justify-between gap-4">
+                <div class="glass-panel p-5 rounded-xl border border-red-500/20 bg-red-500/5 flex items-center justify-between gap-4 mb-4">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400">
                             <i class="fa-solid fa-circle-exclamation text-xl"></i>
@@ -143,13 +183,6 @@
                 </div>
             `).join('');
         }
-
-        // Auto-scroll all log windows to bottom
-        setTimeout(() => {
-            document.querySelectorAll('.auto-scroll-log').forEach(el => {
-                el.scrollTop = el.scrollHeight;
-            });
-        }, 50);
     }
 
     async function dismissTask(tid) {
@@ -165,11 +198,6 @@
     }
 
     async function updateDBStatus() {
-        try { fetch('/api/db/status'); } catch(e) {}
-    }
-</script>
-{% endblock %}
-tus() {
         try { fetch('/api/db/status'); } catch(e) {}
     }
 </script>
