@@ -1,187 +1,328 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div class="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
     <div>
-        <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">ติดตามคิวงาน</h2>
-        <p class="text-slate-400">แสดงสถานะการประมวลผลวิดีโอที่กำลังรอคิวและกำลังทำงาน</p>
+        <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">Job Monitor</h2>
+        <p class="text-slate-400">ติดตามงานวิดีโอและรูปภาพจากคิวเดียว พร้อมสถานะ ความคืบหน้า log และผลลัพธ์</p>
     </div>
-    <div class="flex gap-2">
-        <span class="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2">
-            <i class="fa-solid fa- layer-group"></i> คิวงานวิดีโอ
-        </span>
+    <div class="flex items-center gap-2">
+        <button onclick="refreshJobs(true)" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/5 px-4 py-2.5 rounded-xl text-sm transition-all flex items-center gap-2">
+            <i class="fa-solid fa-rotate"></i>
+            รีเฟรช
+        </button>
     </div>
 </div>
 
-<div class="space-y-6">
-    <!-- Queue Section -->
-    <div id="queue-container" class="space-y-4">
-        <!-- Tasks will be injected here -->
-        <div id="empty-queue" class="hidden bg-slate-900/40 rounded-2xl border border-dashed border-slate-800 py-16 text-center">
-            <div class="bg-slate-800/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-600 border border-white/5">
-                <i class="fa-solid fa-check-double text-3xl"></i>
-            </div>
-            <p class="text-slate-400 font-medium text-lg">ไม่มีงานค้างในคิว</p>
-            <p class="text-slate-500 text-sm mt-1">คุณสามารถเพิ่มงานใหม่ได้จากเมนูจัดการวิดีโอ</p>
-        </div>
+<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+    <button data-filter="all" onclick="setFilter('all')" class="filter-btn glass-panel rounded-xl px-4 py-3 text-left border border-blue-500/40 bg-blue-500/10">
+        <div class="text-[10px] uppercase font-bold text-slate-500">All</div>
+        <div id="count-all" class="text-2xl font-bold text-white">0</div>
+    </button>
+    <button data-filter="processing" onclick="setFilter('processing')" class="filter-btn glass-panel rounded-xl px-4 py-3 text-left">
+        <div class="text-[10px] uppercase font-bold text-blue-400">Processing</div>
+        <div id="count-processing" class="text-2xl font-bold text-white">0</div>
+    </button>
+    <button data-filter="queued" onclick="setFilter('queued')" class="filter-btn glass-panel rounded-xl px-4 py-3 text-left">
+        <div class="text-[10px] uppercase font-bold text-slate-400">Queued</div>
+        <div id="count-queued" class="text-2xl font-bold text-white">0</div>
+    </button>
+    <button data-filter="completed" onclick="setFilter('completed')" class="filter-btn glass-panel rounded-xl px-4 py-3 text-left">
+        <div class="text-[10px] uppercase font-bold text-emerald-400">Completed</div>
+        <div id="count-completed" class="text-2xl font-bold text-white">0</div>
+    </button>
+    <button data-filter="error" onclick="setFilter('error')" class="filter-btn glass-panel rounded-xl px-4 py-3 text-left">
+        <div class="text-[10px] uppercase font-bold text-red-400">Error</div>
+        <div id="count-error" class="text-2xl font-bold text-white">0</div>
+    </button>
+</div>
 
-        <div id="task-list" class="grid grid-cols-1 gap-4">
-            <!-- Dynamic Task Cards -->
-        </div>
+<div class="glass-panel rounded-2xl p-3 mb-5 flex flex-wrap items-center gap-2">
+    <button data-type="all" onclick="setTypeFilter('all')" class="type-btn px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold">ทั้งหมด</button>
+    <button data-type="video" onclick="setTypeFilter('video')" class="type-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold">
+        <i class="fa-solid fa-video mr-1"></i> วิดีโอ
+    </button>
+    <button data-type="image" onclick="setTypeFilter('image')" class="type-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold">
+        <i class="fa-solid fa-image mr-1"></i> รูปภาพ
+    </button>
+    <div class="ml-auto text-xs text-slate-500">
+        อัปเดตล่าสุด: <span id="last-updated">-</span>
     </div>
 </div>
+
+<div id="empty-state" class="hidden bg-slate-900/40 rounded-2xl border border-dashed border-slate-800 py-16 text-center">
+    <div class="bg-slate-800/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-600 border border-white/5">
+        <i class="fa-solid fa-list-check text-3xl"></i>
+    </div>
+    <p class="text-slate-300 font-medium text-lg">ยังไม่มีงานในมุมมองนี้</p>
+    <p class="text-slate-500 text-sm mt-1">สร้างงานใหม่จากเมนูวิดีโอหรือรูปภาพ แล้วกลับมาดูสถานะที่นี่</p>
+</div>
+
+<div id="job-list" class="space-y-4"></div>
 
 <style>
-    @keyframes pulse-border {
-        0% { border-color: rgba(59, 130, 246, 0.2); }
-        50% { border-color: rgba(59, 130, 246, 0.6); }
-        100% { border-color: rgba(59, 130, 246, 0.2); }
+    .job-log {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     }
-    .active-task-border {
-        animation: pulse-border 2s infinite;
-    }
-    .task-card {
-        transition: all 0.3s ease;
-    }
-    .task-card:hover {
-        transform: translateY(-2px);
-        background: rgba(30, 41, 59, 0.8);
+    .filter-btn, .type-btn {
+        transition: all 0.2s ease;
     }
 </style>
 
 <script>
-    let isPaused = false;
+    let jobs = [];
+    let statusFilter = 'all';
+    let typeFilter = 'all';
+    let pollingPaused = false;
 
     document.addEventListener('DOMContentLoaded', () => {
-        updateQueue();
-        setInterval(updateQueue, 2000);
+        refreshJobs();
+        setInterval(refreshJobs, 2000);
     });
 
-    async function updateQueue() {
-        if (isPaused) return;
+    async function refreshJobs(force = false) {
+        if (pollingPaused && !force) return;
         try {
-            const res = await fetch('/api/tasks');
-            const tasks = await res.json();
-            renderQueue(tasks);
-        } catch (e) {
-            console.error('Failed to update queue:', e);
+            const res = await fetch('/api/jobs');
+            jobs = await res.json();
+            renderJobs();
+            document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
+        } catch (error) {
+            console.error('Failed to load jobs', error);
         }
     }
 
-    function renderQueue(tasks) {
-        const taskList = document.getElementById('task-list');
-        const emptyState = document.getElementById('empty-queue');
-        
-        const taskArray = Array.isArray(tasks) ? tasks : Object.values(tasks);
-        const relevantTasks = taskArray
-            .filter(t => t.type === 'video' && (t.status === 'queued' || t.status === 'processing' || t.status === 'error'))
-            .sort((a, b) => {
-                if (a.status === 'processing' && b.status !== 'processing') return -1;
-                if (b.status === 'processing' && a.status !== 'processing') return 1;
-                if (a.status === 'error' && b.status !== 'error') return 1;
-                if (b.status === 'error' && a.status !== 'error') return -1;
-                return 0;
-            });
+    function setFilter(nextFilter) {
+        statusFilter = nextFilter;
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            const active = btn.dataset.filter === nextFilter;
+            btn.classList.toggle('border-blue-500/40', active);
+            btn.classList.toggle('bg-blue-500/10', active);
+        });
+        renderJobs();
+    }
 
-        if (relevantTasks.length === 0) {
-            taskList.innerHTML = '';
-            emptyState.classList.remove('hidden');
+    function setTypeFilter(nextFilter) {
+        typeFilter = nextFilter;
+        document.querySelectorAll('.type-btn').forEach(btn => {
+            const active = btn.dataset.type === nextFilter;
+            btn.className = active
+                ? 'type-btn px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold'
+                : 'type-btn px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold';
+        });
+        renderJobs();
+    }
+
+    function normalizeJobs(rawJobs) {
+        return Array.isArray(rawJobs) ? rawJobs : Object.values(rawJobs || {});
+    }
+
+    function renderJobs() {
+        const allJobs = normalizeJobs(jobs);
+        updateCounts(allJobs);
+
+        const visibleJobs = allJobs.filter(job => {
+            const statusMatch = statusFilter === 'all' || job.status === statusFilter;
+            const typeMatch = typeFilter === 'all' || job.type === typeFilter;
+            return statusMatch && typeMatch;
+        });
+
+        const list = document.getElementById('job-list');
+        const empty = document.getElementById('empty-state');
+
+        if (visibleJobs.length === 0) {
+            list.innerHTML = '';
+            empty.classList.remove('hidden');
             return;
         }
 
-        emptyState.classList.add('hidden');
-        
-        let html = '';
-        relevantTasks.forEach(task => {
-            const isProcessing = task.status === 'processing';
-            const isQueued = task.status === 'queued';
-            const isError = task.status === 'error';
-            
-            let statusBadge = '';
-            let cardClasses = 'task-card glass-panel p-5 rounded-2xl border border-white/5 relative overflow-hidden ';
-            let iconClass = '';
-            let progressColor = 'from-blue-600 to-blue-400';
-            
-            if (isProcessing) {
-                statusBadge = '<span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold uppercase animate-pulse">PROCESSING</span>';
-                cardClasses += 'active-task-border bg-blue-500/5';
-                iconClass = 'fa-circle-notch fa-spin text-blue-400';
-            } else if (isQueued) {
-                statusBadge = '<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400 font-bold uppercase">IN QUEUE</span>';
-                iconClass = 'fa-clock text-slate-500';
-                progressColor = 'from-slate-600 to-slate-500';
-            } else if (isError) {
-                statusBadge = '<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold uppercase">ERROR</span>';
-                cardClasses += 'border-red-500/30 bg-red-500/5';
-                iconClass = 'fa-circle-exclamation text-red-400';
-            }
+        empty.classList.add('hidden');
+        list.innerHTML = visibleJobs.map(renderJobCard).join('');
+    }
 
-            html += `
-                <div class="${cardClasses}" id="task-${task.task_id}">
-                    <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 relative z-10">
-                        <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-xl bg-slate-800/50 flex items-center justify-center shrink-0 border border-white/5">
-                                <i class="fa-solid ${iconClass} text-xl"></i>
+    function updateCounts(allJobs) {
+        const counts = {
+            all: allJobs.length,
+            queued: 0,
+            processing: 0,
+            completed: 0,
+            error: 0
+        };
+        allJobs.forEach(job => {
+            if (counts[job.status] !== undefined) counts[job.status] += 1;
+        });
+        Object.entries(counts).forEach(([key, value]) => {
+            const el = document.getElementById(`count-${key}`);
+            if (el) el.textContent = value;
+        });
+    }
+
+    function renderJobCard(job) {
+        const status = job.status || 'unknown';
+        const stage = job.stage || status;
+        const progress = job.progress || '0%';
+        const logs = Array.isArray(job.logs) ? job.logs.slice(-8) : [];
+        const resultUrl = job.result_url || (job.result && job.result.url) || '';
+        const isActive = status === 'processing' || status === 'queued';
+        const isProcessing = status === 'processing';
+        const isError = status === 'error';
+        const isDone = status === 'completed';
+        const icon = job.type === 'image' ? 'fa-image' : 'fa-video';
+        const accent = isError ? 'red' : isDone ? 'emerald' : isProcessing ? 'blue' : 'slate';
+        const theme = accentTheme(accent);
+        const createdAt = formatDate(job.created_at);
+        const heartbeat = formatDate(job.heartbeat_at);
+
+        return `
+            <div class="glass-panel rounded-2xl p-5 border ${theme.border} relative overflow-hidden" id="job-${job.task_id}">
+                <div class="flex flex-col lg:flex-row gap-5">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex flex-wrap items-center gap-2 mb-2">
+                            <div class="w-10 h-10 rounded-xl bg-slate-900/70 border border-white/5 flex items-center justify-center ${theme.text}">
+                                <i class="fa-solid ${icon}"></i>
                             </div>
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-2 mb-1">
-                                    <h4 class="font-bold text-white truncate text-lg">${task.name || 'วิดีโอไม่มีชื่อ'}</h4>
-                                    ${statusBadge}
+                            <div class="min-w-0 flex-1">
+                                <h3 class="text-white font-bold text-lg truncate">${escapeHtml(job.name || job.task_id)}</h3>
+                                <div class="flex flex-wrap items-center gap-2 mt-1">
+                                    ${statusBadge(status)}
+                                    <span class="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 uppercase font-bold">${escapeHtml(job.type || '-')}</span>
+                                    <span class="text-xs text-slate-500">stage: <span class="text-slate-300">${escapeHtml(stage)}</span></span>
                                 </div>
-                                <p class="text-sm ${isError ? 'text-red-400' : 'text-slate-400'} truncate">${task.message || 'กำลังรอการประมวลผล...'}</p>
                             </div>
                         </div>
-                        
-                        <div class="flex items-center gap-4 sm:min-w-[300px]">
-                            <div class="flex-1">
-                                <div class="flex justify-between mb-1">
-                                    <span class="text-[10px] font-bold text-slate-500 uppercase">Progress</span>
-                                    <span class="text-xs font-bold ${isError ? 'text-red-400' : 'text-blue-400'}">${task.progress || '0%'}</span>
-                                </div>
-                                <div class="h-2 bg-slate-800 rounded-full overflow-hidden border border-white/5">
-                                    <div class="h-full bg-gradient-to-r ${progressColor} transition-all duration-1000 linear" style="width: ${task.progress || '0%'}"></div>
-                                </div>
+
+                        <p class="${isError ? 'text-red-400' : 'text-slate-400'} text-sm mb-4">${escapeHtml(job.message || '-')}</p>
+
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-500 font-bold uppercase">Progress</span>
+                                <span class="${theme.text} font-bold">${escapeHtml(progress)}</span>
                             </div>
-                            
-                            <button onclick="deleteTask('${task.task_id}')" class="bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 p-2.5 rounded-xl border border-white/5 transition-all" title="ลบออกจากรายการ">
-                                <i class="fa-solid fa-trash-can"></i>
+                            <div class="h-2.5 bg-slate-900 rounded-full overflow-hidden border border-white/5">
+                                <div class="h-full ${theme.bar} transition-all duration-700" style="width: ${escapeHtml(progress)}"></div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                            <div class="bg-slate-900/50 rounded-lg px-3 py-2 border border-white/5">
+                                <div class="text-slate-500 uppercase font-bold text-[10px]">Created</div>
+                                <div class="text-slate-300">${createdAt}</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg px-3 py-2 border border-white/5">
+                                <div class="text-slate-500 uppercase font-bold text-[10px]">Heartbeat</div>
+                                <div class="text-slate-300">${heartbeat}</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg px-3 py-2 border border-white/5">
+                                <div class="text-slate-500 uppercase font-bold text-[10px]">Retries</div>
+                                <div class="text-slate-300">${job.retry_count || 0}</div>
+                            </div>
+                        </div>
+
+                        ${resultUrl ? `
+                            <div class="mt-4 flex flex-col sm:flex-row gap-2">
+                                <input readonly value="${escapeAttr(resultUrl)}" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono">
+                                <button onclick="copyToClipboard('${escapeAttr(resultUrl)}')" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-sm flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="lg:w-[360px] flex flex-col gap-3">
+                        <div class="job-log bg-slate-950/80 rounded-xl border border-white/5 h-44 overflow-y-auto p-3 text-[11px] text-slate-300">
+                            ${logs.length ? logs.map(log => `<div class="mb-1 opacity-80">${escapeHtml(log)}</div>`).join('') : '<span class="text-slate-600">No logs yet</span>'}
+                        </div>
+                        <div class="flex gap-2 justify-end">
+                            ${isActive ? `
+                                <button onclick="cancelJob('${job.task_id}')" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-3 py-2 rounded-xl text-sm flex items-center gap-2">
+                                    <i class="fa-solid fa-ban"></i> Cancel
+                                </button>
+                            ` : ''}
+                            <button onclick="deleteJob('${job.task_id}')" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-2 rounded-xl text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-trash-can"></i> Delete
                             </button>
                         </div>
                     </div>
                 </div>
-            `;
-        });
-        
-        taskList.innerHTML = html;
+            </div>
+        `;
     }
 
-    async function deleteTask(tid) {
-        if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้ออกจากรายการ?')) return;
-        
-        // Optimistic UI: Hide immediately
-        const card = document.getElementById(`task-${tid}`);
-        if (card) card.classList.add('hidden');
-        
-        // Pause polling
-        isPaused = true;
+    function accentTheme(accent) {
+        const themes = {
+            red: { border: 'border-red-500/20', text: 'text-red-400', bar: 'bg-red-500' },
+            emerald: { border: 'border-emerald-500/20', text: 'text-emerald-400', bar: 'bg-emerald-500' },
+            blue: { border: 'border-blue-500/20', text: 'text-blue-400', bar: 'bg-blue-500' },
+            slate: { border: 'border-slate-500/20', text: 'text-slate-400', bar: 'bg-slate-500' }
+        };
+        return themes[accent] || themes.slate;
+    }
 
+    function statusBadge(status) {
+        const map = {
+            queued: 'bg-slate-500/20 text-slate-300',
+            processing: 'bg-blue-500/20 text-blue-400 animate-pulse',
+            completed: 'bg-emerald-500/20 text-emerald-400',
+            error: 'bg-red-500/20 text-red-400',
+            canceled: 'bg-amber-500/20 text-amber-400'
+        };
+        return `<span class="text-[10px] px-2 py-0.5 rounded-full ${map[status] || 'bg-slate-500/20 text-slate-300'} font-bold uppercase">${escapeHtml(status)}</span>`;
+    }
+
+    async function cancelJob(taskId) {
+        if (!confirm('ต้องการยกเลิกงานนี้ใช่ไหม?')) return;
+        pollingPaused = true;
         try {
-            const res = await fetch(`/api/task/${tid}/delete`, { method: 'POST' });
-            if (res.ok) {
-                showToast('ลบงานออกจากรายการแล้ว');
-            } else {
-                if (card) card.classList.remove('hidden');
-                showToast('ไม่สามารถลบงานได้', true);
-            }
-        } catch (e) {
-            if (card) card.classList.remove('hidden');
-            showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', true);
+            const res = await fetch(`/api/jobs/${taskId}/cancel`, { method: 'POST' });
+            if (res.ok) showToast('ส่งคำสั่งยกเลิกงานแล้ว');
+            else showToast('ยกเลิกงานไม่สำเร็จ', true);
+        } catch (error) {
+            showToast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', true);
         } finally {
-            setTimeout(() => {
-                isPaused = false;
-                updateQueue();
-            }, 2000);
+            pollingPaused = false;
+            refreshJobs(true);
         }
+    }
+
+    async function deleteJob(taskId) {
+        if (!confirm('ต้องการลบงานนี้ออกจากรายการใช่ไหม?')) return;
+        const card = document.getElementById(`job-${taskId}`);
+        if (card) card.classList.add('opacity-40');
+        pollingPaused = true;
+        try {
+            const res = await fetch(`/api/jobs/${taskId}`, { method: 'DELETE' });
+            if (res.ok) showToast('ลบงานออกจากรายการแล้ว');
+            else {
+                if (card) card.classList.remove('opacity-40');
+                showToast('ลบงานไม่สำเร็จ', true);
+            }
+        } catch (error) {
+            if (card) card.classList.remove('opacity-40');
+            showToast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', true);
+        } finally {
+            pollingPaused = false;
+            refreshJobs(true);
+        }
+    }
+
+    function formatDate(value) {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '-';
+        return date.toLocaleString();
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    function escapeAttr(value) {
+        return escapeHtml(value).replaceAll('`', '&#096;');
     }
 </script>
 {% endblock %}

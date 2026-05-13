@@ -10,9 +10,11 @@ from werkzeug.utils import secure_filename
 from series_manager.jobs.store import (
     append_log,
     claim_next_job,
-    delete_job,
+    cleanup_terminal_jobs,
     get_job,
+    heartbeat_job,
     replace_logs,
+    recover_stale_processing_jobs,
     should_cancel,
     update_job,
 )
@@ -22,10 +24,37 @@ running_processes = {}
 worker_lock = threading.Lock()
 
 
+def env_int(name, default):
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 def worker_loop(poll_interval=3):
     print("Job worker loop started")
+    maintenance_interval = env_int("JOB_MAINTENANCE_INTERVAL_SECONDS", 60)
+    stale_after_minutes = env_int("JOB_STALE_AFTER_MINUTES", 60)
+    max_recoveries = env_int("JOB_MAX_RECOVERIES", 2)
+    last_maintenance = 0
+
     while True:
         try:
+            now = time.monotonic()
+            if now - last_maintenance >= maintenance_interval:
+                recovered = recover_stale_processing_jobs(
+                    stale_after_minutes=stale_after_minutes,
+                    max_recoveries=max_recoveries,
+                )
+                deleted = cleanup_terminal_jobs(
+                    completed_hours=env_int("JOB_COMPLETED_RETENTION_HOURS", 24),
+                    canceled_hours=env_int("JOB_CANCELED_RETENTION_HOURS", 24),
+                    error_days=env_int("JOB_ERROR_RETENTION_DAYS", 7),
+                )
+                if recovered or deleted:
+                    print(f"Job maintenance: recovered={recovered}, cleaned={deleted}", flush=True)
+                last_maintenance = now
+
             job = claim_next_job()
             if job:
                 process_job(job)
@@ -43,6 +72,19 @@ def process_job(job):
             process_image_job(job)
         else:
             update_job(job["task_id"], status="error", message=f"Unknown job type: {job.get('type')}")
+
+
+class Heartbeat:
+    def __init__(self, task_id):
+        self.task_id = task_id
+        self.interval = env_int("JOB_HEARTBEAT_INTERVAL_SECONDS", 15)
+        self.last = 0
+
+    def beat(self, force=False):
+        now = time.monotonic()
+        if force or now - self.last >= self.interval:
+            heartbeat_job(self.task_id)
+            self.last = now
 
 
 def terminate_task(task_id):
@@ -89,11 +131,14 @@ def process_video_job(job):
     m3u8_url = job.get("m3u8_url") or job.get("payload", {}).get("m3u8_url")
     tmp_dir = f"data/tmp_{task_id}"
     task_logs = []
+    heartbeat = Heartbeat(task_id)
 
     try:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
         os.makedirs(tmp_dir, exist_ok=True)
         output_m3u8 = os.path.join(tmp_dir, "playlist.m3u8")
         update_job(task_id, stage="probe", message="Analyzing source video", progress="1%", progress_value=1)
+        heartbeat.beat(force=True)
         total_duration = get_video_duration(m3u8_url)
 
         cmd = [
@@ -137,6 +182,7 @@ def process_video_job(job):
         ]
 
         update_job(task_id, stage="transcoding", message="Transcoding video", progress="2%", progress_value=2)
+        heartbeat.beat(force=True)
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         running_processes[task_id] = process
         progress_regex = re.compile(r"frame=\s*(\d+)\s+fps=\s*([\d.]+).*time=(\d{2}:\d{2}:\d{2}\.\d{2}).*speed=\s*([\d.]+x)")
@@ -149,6 +195,7 @@ def process_video_job(job):
             task_logs.append(line)
             task_logs = task_logs[-150:]
             append_log(task_id, line)
+            heartbeat.beat()
 
             if should_cancel(task_id):
                 process.terminate()
@@ -186,10 +233,12 @@ def process_video_job(job):
         total_bytes = sum(os.path.getsize(os.path.join(tmp_dir, name)) for name in files_to_upload)
         uploaded_bytes = 0
         update_job(task_id, stage="uploading", message="Uploading video files to R2", progress="85%", progress_value=85)
+        heartbeat.beat(force=True)
 
         for filename in files_to_upload:
             if should_cancel(task_id):
                 raise RuntimeError("Task canceled")
+            heartbeat.beat()
             local_path = os.path.join(tmp_dir, filename)
             file_size = os.path.getsize(local_path)
             s3_key = f"series/{series_name}/{ep_name}/{filename}"
@@ -204,6 +253,7 @@ def process_video_job(job):
             upload_percent = uploaded_bytes / total_bytes if total_bytes else 1
             overall_percent = 85 + int(upload_percent * 15)
             append_log(task_id, f"Uploaded: {filename}")
+            heartbeat.beat(force=True)
             update_job(
                 task_id,
                 progress=f"{overall_percent}%",
@@ -220,8 +270,6 @@ def process_video_job(job):
             message="Completed",
             result={"url": f"{public_domain()}/series/{series_name}/{ep_name}/playlist.m3u8"},
         )
-        # Keep completed video jobs briefly out of the queue UI by deleting them, preserving old behavior.
-        delete_job(task_id)
     except RuntimeError as exc:
         running_processes.pop(task_id, None)
         if "canceled" in str(exc).lower():
@@ -241,9 +289,16 @@ def process_image_job(job):
     input_image_path = job.get("input_image_path") or job.get("payload", {}).get("input_image_path")
     output_webp = f"{input_image_path}.webp"
     task_logs = []
+    heartbeat = Heartbeat(task_id)
 
     try:
+        try:
+            if os.path.exists(output_webp):
+                os.remove(output_webp)
+        except Exception:
+            pass
         update_job(task_id, stage="transcoding", message="Converting image to WebP", progress="20%", progress_value=20)
+        heartbeat.beat(force=True)
         cmd = ["ffmpeg", "-y", "-i", input_image_path, "-c:v", "libwebp", "-quality", "80", output_webp]
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         running_processes[task_id] = process
@@ -255,6 +310,7 @@ def process_image_job(job):
             task_logs.append(line)
             task_logs = task_logs[-150:]
             append_log(task_id, line)
+            heartbeat.beat()
             if should_cancel(task_id):
                 process.terminate()
                 raise RuntimeError("Task canceled")
@@ -268,6 +324,7 @@ def process_image_job(job):
             return
 
         update_job(task_id, stage="uploading", message="Uploading image to R2", progress="60%", progress_value=60)
+        heartbeat.beat(force=True)
         filename = f"{secure_filename(os.path.basename(input_image_path)).rsplit('.', 1)[0]}.webp"
         s3_key = f"series/{series_name}/{filename}"
         if not upload_file_to_r2(output_webp, s3_key, content_type="image/webp"):

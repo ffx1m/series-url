@@ -107,11 +107,38 @@ def all_tasks():
     return jsonify(list_jobs())
 
 
+@api_bp.route("/jobs", methods=["GET"])
+def all_jobs():
+    return jsonify(list_jobs())
+
+
 @api_bp.route("/task/<task_id>/cancel", methods=["POST"])
 def cancel_task(task_id):
     request_cancel(task_id)
     terminate_task(task_id)
     return jsonify({"message": "Task cancellation requested"})
+
+
+@api_bp.route("/jobs/<task_id>", methods=["GET"])
+def job_status(task_id):
+    return jsonify(get_job(task_id))
+
+
+@api_bp.route("/jobs/<task_id>/cancel", methods=["POST"])
+def cancel_job(task_id):
+    request_cancel(task_id)
+    terminate_task(task_id)
+    return jsonify({"message": "Job cancellation requested"})
+
+
+@api_bp.route("/jobs/<task_id>", methods=["DELETE"])
+def delete_job_api(task_id):
+    terminate_task(task_id)
+    tmp_dir = f"data/tmp_{task_id}"
+    if os.path.exists(tmp_dir):
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    delete_job(task_id)
+    return jsonify({"message": "Job stopped, cleaned up, and deleted"})
 
 
 @api_bp.route("/task/<task_id>/delete", methods=["POST"])
@@ -122,6 +149,16 @@ def delete_task(task_id):
         shutil.rmtree(tmp_dir, ignore_errors=True)
     delete_job(task_id)
     return jsonify({"message": "Task stopped, cleaned up, and deleted"})
+
+
+@api_bp.route("/jobs/video", methods=["POST"])
+def create_video_job():
+    return convert_video()
+
+
+@api_bp.route("/jobs/image", methods=["POST"])
+def create_image_job():
+    return convert_image()
 
 
 @api_bp.route("/delete/object", methods=["POST"])

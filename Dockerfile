@@ -17,6 +17,7 @@ COPY . .
 ENV FLASK_APP=app.py
 ENV FLASK_RUN_HOST=0.0.0.0
 ENV PORT=10000
+ENV START_EMBEDDED_WORKER=false
 
-# Run gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:10000", "--workers", "1", "--threads", "8", "--timeout", "0", "app:app"]
+# Run web and worker processes in one Render web service
+CMD ["python", "start.py"]
