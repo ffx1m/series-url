@@ -64,7 +64,7 @@
                 <span id="progress-percent" class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-400">0%</span>
             </div>
             <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner border border-slate-700/50">
-                <div id="progress-bar" class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500 ease-out" style="width: 0%"></div>
+                <div id="progress-bar" class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-1000 linear" style="width: 0%"></div>
             </div>
             
             <!-- Result URL -->
@@ -153,6 +153,16 @@
         if (!series || fileInput.files.length === 0) {
             showToast('กรุณาเลือกซีรีส์และไฟล์รูปภาพ', true);
             return;
+        }
+
+        // Cleanup old task metadata from DB before starting a new one
+        const oldTaskId = localStorage.getItem('image_task_id');
+        if (oldTaskId) {
+            try {
+                await fetch(`/api/task/${oldTaskId}/delete`, { method: 'POST' });
+            } catch (e) {
+                console.error('Failed to cleanup old task', e);
+            }
         }
 
         const formData = new FormData();

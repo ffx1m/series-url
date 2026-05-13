@@ -23,8 +23,17 @@ def update_task_status(task_id, update_data):
     from utils.r2 import db
     if db is not None:
         try:
-            # AUTO-CLEANUP: If task is completed or canceled, remove it from DB immediately
-            if update_data.get('status') in ['completed', 'canceled']:
+            # Get current task type from memory
+            task_type = tasks.get(task_id, {}).get('type')
+            status = update_data.get('status')
+
+            # AUTO-CLEANUP logic:
+            # 1. Always delete if canceled
+            # 2. Delete video tasks if completed (original behavior)
+            # 3. KEEP image tasks if completed (so UI can get the result_url)
+            should_delete = (status == 'canceled') or (status == 'completed' and task_type == 'video')
+
+            if should_delete:
                 db.tasks.delete_one({'task_id': task_id})
                 if task_id in tasks:
                     del tasks[task_id]
@@ -254,39 +263,64 @@ def start_image_conversion(series_name, input_image_path):
 
 def _process_image_task(task_id, series_name, input_image_path):
     if not task_lock.acquire(blocking=False):
-        update_task_status(task_id, {'status': 'error', 'message': 'ระบบไม่ว่าง'})
+        update_task_status(task_id, {'status': 'error', 'message': 'ระบบไม่ว่าง'}, force_db=True)
         return
     try:
         output_webp = f"{input_image_path}.webp"
         task_logs = []
-        update_task_status(task_id, {'message': 'กำลังบีบอัดรูปภาพ...', 'progress': '30%'})
+        update_task_status(task_id, {'message': 'กำลังบีบอัดรูปภาพเป็น WebP...', 'progress': '20%'})
+        
         cmd = ['ffmpeg', '-y', '-i', input_image_path, '-c:v', 'libwebp', '-quality', '80', output_webp]
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         running_processes[task_id] = process
+        
         for line in process.stdout:
             task_logs.append(line.strip())
             if len(task_logs) > 100: task_logs.pop(0)
+            
         process.wait()
         if task_id in running_processes: del running_processes[task_id]
+        
         if tasks.get(task_id, {}).get('status') == 'canceled':
             try: os.remove(input_image_path); os.remove(output_webp)
             except: pass
             return
+            
         if process.returncode != 0:
-            update_task_status(task_id, {'status': 'error', 'message': 'แปลงรูปไม่สำเร็จ', 'logs': task_logs})
+            update_task_status(task_id, {'status': 'error', 'message': 'แปลงรูปไม่สำเร็จ (FFmpeg)', 'logs': task_logs}, force_db=True)
             return
-        update_task_status(task_id, {'progress': '70%', 'message': 'กำลังอัพโหลด...', 'logs': task_logs})
+            
+        file_size = os.path.getsize(output_webp)
+        update_task_status(task_id, {
+            'progress': '60%', 
+            'message': f'กำลังอัพโหลดรูปภาพ ({round(file_size/1024, 1)} KB)...', 
+            'logs': task_logs
+        })
+        
         filename = os.path.basename(input_image_path).split('.')[0] + ".webp"
         s3_key = f"series/{series_name}/{filename}"
         upload_success = upload_file_to_r2(output_webp, s3_key, content_type='image/webp')
+        
         try: os.remove(input_image_path); os.remove(output_webp)
         except: pass
+        
         if not upload_success:
-            update_task_status(task_id, {'status': 'error', 'message': 'อัพโหลด R2 ไม่สำเร็จ'})
+            update_task_status(task_id, {'status': 'error', 'message': 'อัพโหลด R2 ไม่สำเร็จ'}, force_db=True)
             return
-        update_task_status(task_id, {'status': 'completed', 'progress': '100%', 'message': 'สำเร็จ!'})
+            
+        # Generate result URL for the UI to copy
+        config = load_config()
+        domain = config.get('worker_domain', 'https://series.film01-thirx.workers.dev')
+        result_url = f"{domain}/{s3_key}"
+            
+        update_task_status(task_id, {
+            'status': 'completed', 
+            'progress': '100%', 
+            'message': 'สำเร็จ!',
+            'result_url': result_url
+        }, force_db=True)
     except Exception as e:
-        update_task_status(task_id, {'status': 'error', 'message': str(e)})
+        update_task_status(task_id, {'status': 'error', 'message': str(e)}, force_db=True)
     finally:
         task_lock.release()
 
@@ -303,21 +337,73 @@ def get_task_status(task_id):
     return {'status': 'not_found'}
 
 def get_all_tasks():
-    # Final cleanup of current memory tasks
-    all_tasks = dict(tasks)
+    # Use memory as the source of truth for all live tasks
+    # This is much faster than querying MongoDB for every poll
+    all_tasks_list = []
+    
+    # 1. Start with everything in memory (Processing, Completed Images, etc.)
+    # We copy the IDs first to avoid dictionary size change during iteration
+    task_ids = list(tasks.keys())
+    for tid in task_ids:
+        if tid in tasks:
+            all_tasks_list.append(tasks[tid])
+    
+    # 2. Fetch from DB for anything NOT in memory (mostly Queued tasks or older Errors)
     from utils.r2 import db
     if db is not None:
         try:
-            # LIVE MONITOR LOGIC: Explicitly fetch processing, queued, AND error
+            # Only fetch tasks that aren't already in our memory list
+            known_ids = [t['task_id'] for t in all_tasks_list]
             db_tasks = db.tasks.find({
+                'task_id': {'$nin': known_ids},
                 'status': {'$in': ['processing', 'queued', 'error']}
-            }).sort('_id', -1)
+            }).sort('_id', 1)
+            
             for task in db_tasks:
-                tid = task.get('task_id')
-                # Overwrite/Add from DB to ensure freshest status
                 task_data = dict(task)
                 task_data.pop('_id', None)
-                all_tasks[tid] = task_data
+                all_tasks_list.append(task_data)
         except Exception as e:
             print(f"Error fetching tasks for Monitor: {e}")
-    return all_tasks
+    
+    # 3. Final Sort: By Status (Processing first) then try to maintain chronological order
+    # Since we lost the _id for memory tasks, we'll just ensure 'processing' is at top
+    def sort_key(t):
+        status_order = {'processing': 0, 'queued': 1, 'error': 2, 'completed': 3}
+        return status_order.get(t.get('status'), 99)
+        
+    all_tasks_list.sort(key=sort_key)
+    return all_tasks_list
+cessing', 'queued', 'error']}
+            }).sort('_id', 1)
+            
+            for task in db_tasks:
+                tid = task.get('task_id')
+                task_data = dict(task)
+                task_data.pop('_id', None)
+                
+                # If task is in memory, it's more "live" (e.g. current progress)
+                if tid in memory_tasks:
+                    ordered_tasks.append(memory_tasks[tid])
+                    del memory_tasks[tid] # Remove so we don't double count
+                else:
+                    ordered_tasks.append(task_data)
+        except Exception as e:
+            print(f"Error fetching tasks for Monitor: {e}")
+    
+    # Add any remaining memory tasks that weren't in DB (though they should be)
+    for tid in memory_tasks:
+        ordered_tasks.append(memory_tasks[tid])
+        
+    return ordered_tasks
+y_tasks[tid] # Remove so we don't double count
+                else:
+                    ordered_tasks.append(task_data)
+        except Exception as e:
+            print(f"Error fetching tasks for Monitor: {e}")
+    
+    # Add any remaining memory tasks that weren't in DB (though they should be)
+    for tid in memory_tasks:
+        ordered_tasks.append(memory_tasks[tid])
+        
+    return ordered_tasks

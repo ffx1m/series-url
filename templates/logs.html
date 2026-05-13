@@ -47,6 +47,7 @@
         font-family: 'JetBrains Mono', 'Fira Code', monospace;
         scrollbar-width: thin;
         scrollbar-color: #334155 transparent;
+        scroll-behavior: smooth;
     }
     .log-window::-webkit-scrollbar { width: 4px; }
     .log-window::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
@@ -101,7 +102,7 @@
                                     <span class="text-blue-400">${task.progress}</span>
                                 </div>
                                 <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                    <div class="h-full bg-blue-500 transition-all duration-500" style="width: ${task.progress}"></div>
+                                    <div class="h-full bg-blue-500 transition-all duration-1000 linear" style="width: ${task.progress}"></div>
                                 </div>
                             </div>
                         </div>
@@ -164,6 +165,11 @@
     }
 
     async function updateDBStatus() {
+        try { fetch('/api/db/status'); } catch(e) {}
+    }
+</script>
+{% endblock %}
+tus() {
         try { fetch('/api/db/status'); } catch(e) {}
     }
 </script>
