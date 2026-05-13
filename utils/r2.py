@@ -8,15 +8,7 @@ from pymongo.server_api import ServerApi
 CONFIG_FILE = 'data/config.json'
 
 # MongoDB Setup
-MONGODB_URI = os.environ.get('MONGODB_URI')
 db = None
-if MONGODB_URI:
-    try:
-        client = MongoClient(MONGODB_URI, server_api=ServerApi('1'))
-        # Use 'url_series' as the database name
-        db = client.get_database('url_series')
-    except Exception as e:
-        print(f"MongoDB Connection Error: {e}")
 
 def load_config():
     # 1. Try MongoDB first
@@ -40,6 +32,27 @@ def load_config():
         except Exception:
             return {}
     return {}
+
+def connect_mongodb(uri=None):
+    global db
+    if not uri:
+        config = load_config()
+        uri = config.get('mongodb_uri')
+        
+    if uri:
+        try:
+            client = MongoClient(uri, server_api=ServerApi('1'))
+            # Use 'url_series' as the database name
+            db = client.get_database('url_series')
+            print("Successfully connected to MongoDB")
+            return True
+        except Exception as e:
+            print(f"MongoDB Connection Error: {e}")
+            db = None
+    return False
+
+# Initial connection attempt
+connect_mongodb()
 
 def save_config(config_data):
     # 1. Save to MongoDB

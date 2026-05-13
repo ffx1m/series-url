@@ -124,31 +124,79 @@
         <div class="flex items-center justify-between px-1">
             <div class="flex items-center gap-2 text-slate-400">
                 <i class="fa-solid fa-bolt"></i>
-                <h3 class="text-xs font-bold uppercase tracking-[0.2em]">Workers & Pages Compute</h3>
+                <h3 class="text-xs font-bold uppercase tracking-[0.2em]">Workers & Pages Analytics</h3>
             </div>
             <span id="worker-badge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-500">FREE</span>
         </div>
+        
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Worker Requests (Large Card) -->
-            <div class="md:col-span-2 glass-panel p-6 rounded-2xl relative overflow-hidden group">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div class="flex-1">
-                        <div id="worker-period" class="text-[10px] text-slate-500 mb-2 uppercase font-bold tracking-widest">DAILY INVOCATIONS</div>
-                        <div class="flex items-end gap-1 mb-4">
-                            <span id="val-worker" class="text-5xl font-bold text-white tracking-tight">0</span>
-                            <span id="limit-worker" class="text-slate-500 text-lg mb-1.5">/ 100K</span>
-                        </div>
-                        <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
-                            <div id="bar-worker" class="bg-orange-500 h-full transition-all duration-1000 shadow-[0_0_15px_rgba(249,115,22,0.3)]" style="width: 0%"></div>
-                        </div>
-                        <div class="flex justify-between items-center mt-4 text-sm">
-                            <span id="cost-worker" class="text-slate-500 font-mono font-medium">อยู่ในโควต้าฟรี</span>
-                            <span id="pct-worker" class="text-slate-400 font-bold">0%</span>
+            <!-- Worker Requests -->
+            <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group">
+                <div id="worker-period" class="text-[10px] text-slate-500 mb-2 uppercase font-bold tracking-widest">INVOCATIONS</div>
+                <div class="flex items-end gap-1 mb-4">
+                    <span id="val-worker" class="text-4xl font-bold text-white tracking-tight">0</span>
+                    <span id="limit-worker" class="text-slate-500 text-sm mb-1.5">/ 100K</span>
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div id="bar-worker" class="bg-orange-500 h-full transition-all duration-1000" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-between items-center mt-3 text-xs">
+                    <span id="cost-worker-req" class="text-slate-500 font-mono">อยู่ในโควต้าฟรี</span>
+                    <span id="pct-worker" class="text-slate-400 font-bold">0%</span>
+                </div>
+            </div>
+
+            <!-- Worker CPU Time -->
+            <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group border-t-2 border-t-purple-500/30">
+                <div class="text-[10px] text-slate-500 mb-2 uppercase font-bold tracking-widest">CPU Performance (ms)</div>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <div class="text-[10px] text-slate-500 uppercase">Average (P50)</div>
+                        <div class="flex items-baseline gap-1">
+                            <span id="val-cpu-p50" class="text-2xl font-bold text-white">0</span>
+                            <span class="text-[10px] text-slate-500">ms</span>
                         </div>
                     </div>
-                    <!-- Decorative Icon for Worker Section -->
-                    <div class="hidden md:flex bg-orange-500/5 w-24 h-24 rounded-3xl items-center justify-center border border-orange-500/10">
-                        <i class="fa-solid fa-microchip text-4xl text-orange-500/20"></i>
+                    <div>
+                        <div class="text-[10px] text-slate-500 uppercase">Peak (P99)</div>
+                        <div class="flex items-baseline gap-1">
+                            <span id="val-cpu-p99" class="text-2xl font-bold text-purple-400">0</span>
+                            <span class="text-[10px] text-slate-500">ms</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- CPU Bar based on 10ms (Free) or 50ms (Paid visual limit) -->
+                <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div id="bar-cpu" class="bg-purple-500 h-full transition-all duration-1000" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-between items-center mt-3 text-xs">
+                    <span id="cost-worker-cpu" class="text-slate-500 font-mono text-[10px]">ลิมิตสูงสุด: 10ms</span>
+                    <span id="pct-cpu" class="text-slate-400 font-bold">0%</span>
+                </div>
+            </div>
+
+            <!-- CPU Total Monthly (Visible on Paid) -->
+            <div id="paid-cpu-total-card" class="hidden md:col-span-2 glass-panel p-5 rounded-2xl border border-blue-500/20 bg-blue-500/5">
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="bg-blue-500/20 p-2 rounded-lg text-blue-400">
+                            <i class="fa-solid fa-microchip"></i>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold text-white">ยอดสะสม CPU (Monthly Total)</h4>
+                            <p class="text-[10px] text-slate-400">จ่ายเพิ่มเมื่อเกิน 30 ล้าน ms ($0.02 / 1M ms)</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-6">
+                        <div class="text-right">
+                            <div id="val-cpu-total" class="text-xl font-bold text-white font-mono">0 ms</div>
+                            <div class="text-[10px] text-slate-500 uppercase">Total Usage</div>
+                        </div>
+                        <div class="h-10 w-px bg-white/10"></div>
+                        <div class="text-right">
+                            <div id="cost-cpu-overage" class="text-xl font-bold text-emerald-400 font-mono">$0.00</div>
+                            <div class="text-[10px] text-slate-500 uppercase">Extra Cost</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -171,7 +219,7 @@
         return num.toLocaleString();
     }
 
-    function updateCardUI(id, val, limit, cost) {
+    function updateCardUI(id, val, limit, costText) {
         const pct = Math.min((val / limit) * 100, 100).toFixed(1);
         const valEl = document.getElementById(`val-${id}`);
         if (valEl) valEl.textContent = typeof val === 'number' && val % 1 !== 0 ? val.toFixed(2) : formatNumber(val);
@@ -182,18 +230,13 @@
         const bar = document.getElementById(`bar-${id}`);
         if (bar) {
             bar.style.width = `${pct}%`;
-            if (parseFloat(pct) > 90) bar.classList.add('bg-red-500');
+            if (parseFloat(pct) > 85) bar.className = bar.className.replace('bg-blue-500', 'bg-orange-500').replace('bg-emerald-500', 'bg-orange-500');
+            if (parseFloat(pct) > 95) bar.className = bar.className.replace('bg-orange-500', 'bg-red-500');
         }
         
         const costEl = document.getElementById(`cost-${id}`);
-        if (costEl) {
-            if (cost > 0) {
-                costEl.textContent = `+$${cost.toFixed(2)}`;
-                costEl.className = 'text-red-400 font-bold font-mono';
-            } else {
-                costEl.textContent = 'อยู่ในโควต้าฟรี';
-                costEl.className = 'text-slate-500 font-mono';
-            }
+        if (costEl && costText !== undefined) {
+            costEl.textContent = costText;
         }
     }
 
@@ -211,25 +254,47 @@
                 document.getElementById('dashboard-content').classList.remove('hidden');
                 
                 // R2 Update
-                updateCardUI('storage', data.storage_gb, data.storage_limit, data.storage_cost);
-                updateCardUI('class-a', data.r2_class_a, data.class_a_limit, data.class_a_cost);
-                updateCardUI('class-b', data.r2_class_b, data.class_b_limit, data.class_b_cost);
+                updateCardUI('storage', data.storage_gb, data.storage_limit, data.storage_cost > 0 ? `+$${data.storage_cost.toFixed(2)}` : 'อยู่ในโควต้าฟรี');
+                updateCardUI('class-a', data.r2_class_a, data.class_a_limit, data.class_a_cost > 0 ? `+$${data.class_a_cost.toFixed(2)}` : 'อยู่ในโควต้าฟรี');
+                updateCardUI('class-b', data.r2_class_b, data.class_b_limit, data.class_b_cost > 0 ? `+$${data.class_b_cost.toFixed(2)}` : 'อยู่ในโควต้าฟรี');
                 
-                // Worker Update
+                // Worker Requests Update
                 document.getElementById('worker-period').textContent = data.worker_label;
                 const workerLimitStr = data.worker_limit >= 1000000 ? (data.worker_limit/1000000) + 'M' : (data.worker_limit/1000) + 'K';
                 document.getElementById('limit-worker').textContent = `/ ${workerLimitStr}`;
                 
+                const reqCostText = data.worker_req_cost > 0 ? `+$${data.worker_req_cost.toFixed(2)}` : 'อยู่ในโควต้าฟรี';
+                updateCardUI('worker', data.worker_requests, data.worker_limit, reqCostText);
+                
+                // CPU Time Update
+                document.getElementById('val-cpu-p50').textContent = data.worker_cpu_p50_ms.toFixed(2);
+                document.getElementById('val-cpu-p99').textContent = data.worker_cpu_p99_ms.toFixed(2);
+                
+                // Visual Limit for CPU Bar: 10ms for Free, 50ms for Paid (to show relative intensity)
+                const cpuVisualLimit = data.worker_plan === 'PAID' ? 50 : 10;
+                const cpuPct = Math.min((data.worker_cpu_p99_ms / cpuVisualLimit) * 100, 100).toFixed(1);
+                const cpuBar = document.getElementById('bar-cpu');
+                cpuBar.style.width = `${cpuPct}%`;
+                document.getElementById('pct-cpu').textContent = `${cpuPct}%`;
+                document.getElementById('cost-worker-cpu').textContent = `ลิมิตแนะนำ: ${cpuVisualLimit}ms`;
+                
+                if (parseFloat(cpuPct) > 90) cpuBar.classList.replace('bg-purple-500', 'bg-red-500');
+
+                // Worker Badge & Paid Cards
                 const badge = document.getElementById('worker-badge');
                 if (data.worker_plan === 'PAID') {
-                    badge.textContent = '👑 PAID';
+                    badge.textContent = '👑 PAID (Standard)';
                     badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                    
+                    document.getElementById('paid-cpu-total-card').classList.remove('hidden');
+                    document.getElementById('val-cpu-total').textContent = formatNumber(data.worker_cpu_total_ms) + ' ms';
+                    document.getElementById('cost-cpu-overage').textContent = `+$${data.worker_cpu_cost.toFixed(2)}`;
                 }
                 
-                updateCardUI('worker', data.worker_requests, data.worker_limit, data.worker_cost);
                 document.getElementById('val-total-overage').textContent = `+$${data.total_overage.toFixed(2)}`;
             }
         } catch (e) {
+            console.error(e);
             document.getElementById('stats-loading').classList.add('hidden');
             document.getElementById('stats-error').classList.remove('hidden');
             document.getElementById('error-msg').textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์';

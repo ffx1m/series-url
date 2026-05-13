@@ -69,6 +69,19 @@
             </div>
         </div>
 
+        <div class="bg-slate-900/50 p-5 rounded-xl border border-white/5 border-t-2 border-t-emerald-500/30">
+            <h4 class="text-white font-medium mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-database text-emerald-400 text-lg"></i> ระบบคิวงาน (MongoDB)
+            </h4>
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">MongoDB Connection URI</label>
+                    <input type="password" name="mongodb_uri" value="{{ config.get('mongodb_uri', '') }}" placeholder="mongodb+srv://user:password@cluster.mongodb.net/..." class="w-full bg-slate-950 text-white border border-slate-700/50 rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono text-sm transition-all">
+                    <p class="text-xs text-slate-500 mt-1.5 ml-1"><i class="fa-solid fa-circle-info mr-1"></i>จำเป็นสำหรับการเก็บคิวงานวิดีโอ (ถ้าระบบไม่ได้รับค่านี้ งานวิดีโอจะไม่ทำงาน)</p>
+                </div>
+            </div>
+        </div>
+
         <div class="pt-4 flex justify-end">
             <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-3.5 px-8 rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center gap-2">
                 <i class="fa-solid fa-save"></i> บันทึกการตั้งค่า

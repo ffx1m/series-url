@@ -1,6 +1,18 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<!-- DB Connection Status Alert -->
+<div id="db-alert" class="hidden mb-6 bg-red-500/10 border border-red-500/30 text-red-400 px-5 py-4 rounded-xl flex items-center justify-between shadow-inner">
+    <div class="flex items-center gap-3">
+        <i class="fa-solid fa-database text-xl"></i>
+        <div>
+            <p class="font-bold text-sm">ระบบคิวงานไม่ทำงาน</p>
+            <p class="text-xs opacity-80">กรุณาตั้งค่า MongoDB Connection URI ในหน้าตั้งค่า API ก่อนเริ่มงานวิดีโอ</p>
+        </div>
+    </div>
+    <a href="/settings" class="bg-red-500 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-600 transition-all">ไปที่ตั้งค่า</a>
+</div>
+
 <div class="mb-8">
     <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">จัดการวิดีโอ</h2>
     <p class="text-slate-400">สร้างโฟลเดอร์ซีรีส์และแปลงลิงก์ M3U8 เป็นไฟล์สำหรับสตรีมมิ่ง</p>
@@ -138,33 +150,71 @@
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         loadSeries();
+        checkDBStatus();
+        setInterval(checkDBStatus, 5000);
         resumeTask();
     });
 
-    async function resumeTask() {
-        const taskId = localStorage.getItem('video_task_id');
+    async function checkDBStatus() {
+        try {
+            const res = await fetch('/api/db/status');
+            const data = await res.json();
+            const alertEl = document.getElementById('db-alert');
+            const btn = document.getElementById('convert-btn');
+            
+            if (data.connected) {
+                alertEl.classList.add('hidden');
+                if (btn.innerHTML.includes('กรุณาตั้งค่า')) {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-70', 'cursor-not-allowed');
+                    btn.innerHTML = '<i class="fa-solid fa-bolt"></i> เริ่มสร้างและแปลงไฟล์';
+                }
+            } else {
+                alertEl.classList.remove('hidden');
+                btn.disabled = true;
+                btn.classList.add('opacity-70', 'cursor-not-allowed');
+                btn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> กรุณาตั้งค่า MongoDB';
+            }
+        } catch (e) {}
+    }
 
-        // Always check if there's ANY task running to lock UI
+    async function resumeTask() {
+        // No longer strictly needed as we have the queue page, 
+        // but we'll keep a simple check for 'processing' to show current status if user stays on page
         try {
             const allTasksRes = await fetch('/api/tasks');
             const allTasks = await allTasksRes.json();
-            const activeTask = Object.values(allTasks).find(t => t.status === 'processing');
+            const activeTask = Object.values(allTasks).find(t => t.status === 'processing' && t.type === 'video');
 
             if (activeTask) {
-                const btn = document.getElementById('convert-btn');
-                btn.disabled = true;
-                btn.classList.add('opacity-70', 'cursor-not-allowed');
-                
-                if (taskId && activeTask.task_id === taskId) {
-                    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังดำเนินการต่อ...';
-                    document.getElementById('progress-container').classList.remove('hidden');
-                    checkInterval = setInterval(() => checkStatus(taskId, btn), 1500);
-                } else {
-                    btn.innerHTML = `<i class="fa-solid fa-lock"></i> มีงานอื่นกำลังทำงานอยู่ (${activeTask.type === 'video' ? 'วิดีโอ' : 'รูปภาพ'})`;
+                document.getElementById('progress-container').classList.remove('hidden');
+                updateProgressUI(activeTask);
+                // Start polling only if there is an active task
+                if (!checkInterval) {
+                    checkInterval = setInterval(async () => {
+                        const res = await fetch(`/api/task/${activeTask.task_id}`);
+                        const data = await res.json();
+                        updateProgressUI(data);
+                        if (data.status !== 'processing') {
+                            clearInterval(checkInterval);
+                            checkInterval = null;
+                        }
+                    }, 2000);
                 }
             }
-        } catch (e) {
-            console.error('Failed to check tasks status', e);
+        } catch (e) {}
+    }
+
+    function updateProgressUI(task) {
+        if (!task || task.status === 'not_found') return;
+        document.getElementById('progress-status').textContent = task.message;
+        document.getElementById('progress-percent').textContent = task.progress;
+        document.getElementById('progress-bar').style.width = task.progress;
+        
+        if (task.status === 'completed') {
+            document.getElementById('progress-spinner').className = 'fa-solid fa-check-circle text-emerald-400 text-xl';
+            document.getElementById('result-container').classList.remove('hidden');
+            document.getElementById('result-url').value = task.result_url;
         }
     }
 
@@ -236,18 +286,16 @@
             return;
         }
 
-        // UI Reset
+        const originalHtml = btn.innerHTML;
+        
+        // UI Feedback
         btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังเตรียมประมวลผล...';
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังส่งเข้าคิว...';
         btn.classList.add('opacity-70', 'cursor-not-allowed');
         
-        document.getElementById('progress-container').classList.remove('hidden');
+        // Hide old progress containers
+        document.getElementById('progress-container').classList.add('hidden');
         document.getElementById('result-container').classList.add('hidden');
-        document.getElementById('progress-bar').style.width = '0%';
-        document.getElementById('progress-percent').textContent = '0%';
-        
-        const spinner = document.getElementById('progress-spinner');
-        spinner.className = 'fa-solid fa-circle-notch fa-spin text-purple-400 text-xl';
         
         try {
             const res = await fetch('/api/convert/video', {
@@ -258,61 +306,31 @@
             const data = await res.json();
             
             if (data.task_id) {
-                localStorage.setItem('video_task_id', data.task_id);
-                checkInterval = setInterval(() => checkStatus(data.task_id, btn), 1500);
+                showToast(`เพิ่มตอน ${ep} เข้าสู่คิวแล้ว`);
+                
+                // Reset form for next episode
+                document.getElementById('ep-name').value = '';
+                document.getElementById('m3u8-url').value = '';
+                document.getElementById('ep-name').focus();
             } else {
-                throw new Error(data.error);
+                showToast(data.error || 'เกิดข้อผิดพลาดในการส่งงาน', true);
             }
         } catch (e) {
-            showToast('เกิดข้อผิดพลาด: ' + e, true);
-            resetBtn(btn);
+            console.error(e);
+            showToast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', true);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('opacity-70', 'cursor-not-allowed');
         }
     }
 
     async function checkStatus(taskId, btn) {
-        try {
-            const res = await fetch(`/api/task/${taskId}`);
-            const data = await res.json();
-            
-            // Handle task not found (e.g. server restarted and memory cleared)
-            if (data.status === 'not_found') {
-                clearInterval(checkInterval);
-                localStorage.removeItem('video_task_id');
-                resetBtn(btn);
-                document.getElementById('progress-container').classList.add('hidden');
-                return;
-            }
-
-            document.getElementById('progress-status').textContent = data.message;
-            document.getElementById('progress-percent').textContent = data.progress;
-            document.getElementById('progress-bar').style.width = data.progress;
-            
-            if (data.status === 'completed' || data.status === 'error') {
-                clearInterval(checkInterval);
-                localStorage.removeItem('video_task_id');
-                resetBtn(btn);
-                
-                const spinner = document.getElementById('progress-spinner');
-                
-                if (data.status === 'completed') {
-                    spinner.className = 'fa-solid fa-check-circle text-emerald-400 text-xl';
-                    document.getElementById('result-container').classList.remove('hidden');
-                    document.getElementById('result-url').value = data.result_url;
-                    showToast('ประมวลผลวิดีโอสำเร็จ');
-                } else {
-                    spinner.className = 'fa-solid fa-circle-exclamation text-red-400 text-xl';
-                    showToast(data.message, true);
-                }
-            }
-        } catch (e) {
-            console.error(e);
-        }
+        // Obsolete
     }
     
     function resetBtn(btn) {
-        btn.disabled = false;
-        btn.classList.remove('opacity-70', 'cursor-not-allowed');
-        btn.innerHTML = '<i class="fa-solid fa-bolt"></i> เริ่มสร้างและแปลงไฟล์';
+        // Obsolete
     }
 </script>
 {% endblock %}

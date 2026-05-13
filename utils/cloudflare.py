@@ -41,98 +41,112 @@ def get_cloudflare_stats():
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_start_str = today_start.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # 3. Query GraphQL (Try with CPU first, fallback if fails)
     url = "https://api.cloudflare.com/client/v4/graphql"
-    query = """
-    query GetStats($accountTag: string, $monthStart: string, $todayStart: string, $bucketName: string) {
+    query_with_cpu = """
+    query GetStats($accountTag: string, $monthStart: string, $todayStart: string) {
       viewer {
         accounts(filter: {accountTag: $accountTag}) {
-          # R2 Operations (Monthly)
-          r2OperationsAdaptiveGroups(limit: 1000, filter: {datetime_geq: $monthStart, bucketName: $bucketName}) {
-            dimensions {
-              actionType
-            }
-            sum {
-              requests
-            }
-          }
-          # R2 Storage (Current)
-          r2StorageAdaptiveGroups(limit: 1, filter: {datetime_geq: $monthStart, bucketName: $bucketName}) {
-            max {
-              metadataSize
-              payloadSize
-            }
-          }
-          # Workers Monthly (for Paid Plan)
           workersMonthly: workersInvocationsAdaptive(limit: 1, filter: {datetime_geq: $monthStart}) {
-            sum {
-              requests
-            }
+            sum { requests cpuTime }
+            quantiles { cpuTimeP50 cpuTimeP99 }
           }
-          # Workers Daily (for Free Plan)
           workersDaily: workersInvocationsAdaptive(limit: 1, filter: {datetime_geq: $todayStart}) {
-            sum {
-              requests
-            }
+            sum { requests cpuTime }
+            quantiles { cpuTimeP50 cpuTimeP99 }
+          }
+        }
+      }
+    }
+    """
+    
+    query_fallback = """
+    query GetStats($accountTag: string, $monthStart: string, $todayStart: string) {
+      viewer {
+        accounts(filter: {accountTag: $accountTag}) {
+          workersMonthly: workersInvocationsAdaptive(limit: 1, filter: {datetime_geq: $monthStart}) {
+            sum { requests }
+          }
+          workersDaily: workersInvocationsAdaptive(limit: 1, filter: {datetime_geq: $todayStart}) {
+            sum { requests }
           }
         }
       }
     }
     """
 
-    variables = {
-        "accountTag": account_id,
-        "monthStart": month_start_str,
-        "todayStart": today_start_str,
-        "bucketName": bucket_name
+    # Separate query for R2 to avoid mixing issues
+    query_r2 = """
+    query GetR2Stats($accountTag: string, $monthStart: string, $bucketName: string) {
+      viewer {
+        accounts(filter: {accountTag: $accountTag}) {
+          r2OperationsAdaptiveGroups(limit: 1000, filter: {datetime_geq: $monthStart, bucketName: $bucketName}) {
+            dimensions { actionType }
+            sum { requests }
+          }
+          r2StorageAdaptiveGroups(limit: 1, filter: {datetime_geq: $monthStart, bucketName: $bucketName}) {
+            max { metadataSize payloadSize }
+          }
+        }
+      }
     }
+    """
 
     try:
-        response = requests.post(url, headers=headers, json={"query": query, "variables": variables})
-        response.raise_for_status()
-        data = response.json()
-        
-        if 'errors' in data and data['errors']:
-            return {"error": data['errors'][0]['message']}
-
-        accounts = data.get('data', {}).get('viewer', {}).get('accounts', [])
-        if not accounts:
-            return {"error": "No data returned for this account"}
-
-        account_data = accounts[0]
-        
-        # Parse R2
-        r2_class_a = 0
-        r2_class_b = 0
-        class_a_types = ['PutObject', 'CopyObject', 'CompleteMultipartUpload', 'CreateMultipartUpload', 'UploadPart', 'UploadPartCopy', 'ListObjects', 'ListBuckets', 'CreateBucket']
-        class_b_types = ['GetObject', 'HeadObject', 'HeadBucket']
-        
-        for op in account_data.get('r2OperationsAdaptiveGroups', []):
-            action = op.get('dimensions', {}).get('actionType', '')
-            reqs = op.get('sum', {}).get('requests', 0)
-            if action in class_a_types: r2_class_a += reqs
-            elif action in class_b_types: r2_class_b += reqs
-            
-        # Parse Workers based on Plan
+        # Step 1: Get Workers Data
         worker_requests = 0
+        worker_cpu_total_ms = 0
+        worker_cpu_p50_ms = 0
+        worker_cpu_p99_ms = 0
+        
         if worker_plan == "paid":
-            workers_data = account_data.get('workersMonthly', [])
-            if workers_data:
-                worker_requests = workers_data[0].get('sum', {}).get('requests', 0)
             worker_limit = 10000000
             worker_label = "Monthly Invocations"
         else:
-            workers_data = account_data.get('workersDaily', [])
-            if workers_data:
-                worker_requests = workers_data[0].get('sum', {}).get('requests', 0)
             worker_limit = 100000
             worker_label = "Daily Invocations"
-            
-        # Parse Storage
+        
+        # Try full query
+        res = requests.post(url, headers=headers, json={"query": query_with_cpu, "variables": {"accountTag": account_id, "monthStart": month_start_str, "todayStart": today_start_str}})
+        data = res.json()
+        
+        # If CPU field is unknown, fallback
+        if 'errors' in data and any('cpuTime' in e.get('message', '') for e in data['errors']):
+            res = requests.post(url, headers=headers, json={"query": query_fallback, "variables": {"accountTag": account_id, "monthStart": month_start_str, "todayStart": today_start_str}})
+            data = res.json()
+        
+        accounts = data.get('data', {}).get('viewer', {}).get('accounts', [])
+        if accounts:
+            acc = accounts[0]
+            w_data = acc.get('workersMonthly', []) if worker_plan == "paid" else acc.get('workersDaily', [])
+            if w_data:
+                worker_requests = w_data[0].get('sum', {}).get('requests', 0)
+                worker_cpu_total_ms = w_data[0].get('sum', {}).get('cpuTime', 0) / 1000
+                worker_cpu_p50_ms = w_data[0].get('quantiles', {}).get('cpuTimeP50', 0) / 1000
+                worker_cpu_p99_ms = w_data[0].get('quantiles', {}).get('cpuTimeP99', 0) / 1000
+
+        # Step 2: Get R2 Data
+        r2_class_a = 0
+        r2_class_b = 0
         storage_bytes = 0
-        r2_storage = account_data.get('r2StorageAdaptiveGroups', [])
-        if r2_storage:
-            max_vals = r2_storage[0].get('max', {})
-            storage_bytes = max_vals.get('metadataSize', 0) + max_vals.get('payloadSize', 0)
+        
+        res_r2 = requests.post(url, headers=headers, json={"query": query_r2, "variables": {"accountTag": account_id, "monthStart": month_start_str, "bucketName": bucket_name}})
+        data_r2 = res_r2.json()
+        accounts_r2 = data_r2.get('data', {}).get('viewer', {}).get('accounts', [])
+        if accounts_r2:
+            acc_r2 = accounts_r2[0]
+            class_a_types = ['PutObject', 'CopyObject', 'CompleteMultipartUpload', 'CreateMultipartUpload', 'UploadPart', 'UploadPartCopy', 'ListObjects', 'ListBuckets', 'CreateBucket']
+            class_b_types = ['GetObject', 'HeadObject', 'HeadBucket']
+            for op in acc_r2.get('r2OperationsAdaptiveGroups', []):
+                action = op.get('dimensions', {}).get('actionType', '')
+                reqs = op.get('sum', {}).get('requests', 0)
+                if action in class_a_types: r2_class_a += reqs
+                elif action in class_b_types: r2_class_b += reqs
+            
+            r2_storage = acc_r2.get('r2StorageAdaptiveGroups', [])
+            if r2_storage:
+                max_vals = r2_storage[0].get('max', {})
+                storage_bytes = max_vals.get('metadataSize', 0) + max_vals.get('payloadSize', 0)
 
         # Calculate Costs
         storage_gb = storage_bytes / (1024**3)
@@ -140,10 +154,11 @@ def get_cloudflare_stats():
         class_a_cost = (max(0, r2_class_a - 1000000) / 1000000) * 4.50
         class_b_cost = (max(0, r2_class_b - 10000000) / 1000000) * 0.36
         
-        # Worker cost (Paid plan only, $0.30 per million overage)
-        worker_cost = 0.0
+        worker_req_cost = 0
+        worker_cpu_cost = 0
         if worker_plan == "paid":
-            worker_cost = (max(0, worker_requests - 10000000) / 1000000) * 0.30
+            worker_req_cost = (max(0, worker_requests - 10000000) / 1000000) * 0.30
+            worker_cpu_cost = (max(0, worker_cpu_total_ms - 30000000) / 1000000) * 0.02
 
         return {
             "worker_plan": worker_plan.upper(),
@@ -159,8 +174,12 @@ def get_cloudflare_stats():
             "class_b_cost": round(class_b_cost, 2),
             "worker_requests": worker_requests,
             "worker_limit": worker_limit,
-            "worker_cost": round(worker_cost, 2),
-            "total_overage": round(storage_cost + class_a_cost + class_b_cost + worker_cost, 2)
+            "worker_cpu_total_ms": round(worker_cpu_total_ms, 2),
+            "worker_cpu_p50_ms": round(worker_cpu_p50_ms, 2),
+            "worker_cpu_p99_ms": round(worker_cpu_p99_ms, 2),
+            "worker_req_cost": round(worker_req_cost, 2),
+            "worker_cpu_cost": round(worker_cpu_cost, 2),
+            "total_overage": round(storage_cost + class_a_cost + class_b_cost + worker_req_cost + worker_cpu_cost, 2)
         }
 
     except requests.exceptions.RequestException as e:

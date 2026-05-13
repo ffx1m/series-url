@@ -31,71 +31,93 @@ def update_task_status(task_id, update_data):
             print(f"Error updating task in MongoDB: {e}")
 
 def cancel_task(task_id):
+    """Cancels a running task or removes a queued task."""
+    # 1. If it's a running process, terminate it
     if task_id in running_processes:
         try:
             process = running_processes[task_id]
-            process.terminate() # or process.kill()
-            return True
+            process.terminate()
+            # The worker thread will handle the cleanup and status update
         except Exception as e:
             print(f"Error killing process {task_id}: {e}")
 
-    # Even if process not found, we mark as canceled in DB
+    # 2. Update status in memory and DB
     update_task_status(task_id, {
         'status': 'canceled',
         'message': 'งานถูกยกเลิกโดยผู้ใช้'
     })
     return True
 
-def get_video_duration(m3u8_url):
+# --- Queue System ---
+def worker_loop():
+    """Background worker that processes video tasks from the queue via MongoDB."""
+    while True:
+        try:
+            # ONLY process if MongoDB is connected
+            from utils.r2 import db
+            if db is not None:
+                # Look for the oldest queued video task
+                queued_task = db.tasks.find_one({'status': 'queued', 'type': 'video'}, sort=[('_id', 1)])
+                if queued_task:
+                    # Found a task!
+                    task_id = queued_task['task_id']
+                    series_name = queued_task.get('series_name')
+                    ep_name = queued_task.get('ep_name')
+                    m3u8_url = queued_task.get('m3u8_url')
+                    
+                    # Process it (the _process_video_task already handles the lock)
+                    _process_video_task(task_id, series_name, ep_name, m3u8_url)
+                    continue # Check for next task immediately
+            else:
+                # DB not connected yet, wait
+                pass
+            
+        except Exception as e:
+            print(f"Error in worker_loop: {e}")
+        
+        import time
+        time.sleep(3) # Wait before checking for new tasks again
 
-    try:
-        cmd = [
-            'ffprobe', '-v', 'error',
-            '-show_entries', 'format=duration',
-            '-of', 'default=noprint_wrappers=1:nokey=1',
-            m3u8_url
-        ]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=15)
-        duration = float(result.stdout.strip())
-        return duration
-    except Exception:
-        return 0
-
-def time_to_seconds(time_str):
-    # time_str format: HH:MM:SS.ms
-    try:
-        h, m, s = time_str.split(':')
-        return int(h) * 3600 + int(m) * 60 + float(s)
-    except:
-        return 0
+# Start the background worker thread
+threading.Thread(target=worker_loop, daemon=True).start()
 
 def start_video_conversion(series_name, ep_name, m3u8_url):
     task_id = str(uuid.uuid4())
     task_data = {
         'task_id': task_id,
-        'status': 'processing', 
+        'status': 'queued', 
         'progress': '0%', 
-        'message': 'กำลังดึงข้อมูลความยาววิดีโอ...', 
+        'message': 'รอคิวใน MongoDB...', 
         'type': 'video',
         'logs': [],
-        'name': f"{series_name} - {ep_name}"
+        'name': f"[{series_name}] - {ep_name}",
+        'series_name': series_name,
+        'ep_name': ep_name,
+        'm3u8_url': m3u8_url
     }
-    update_task_status(task_id, task_data)
+    
+    # Must have DB to queue
+    from utils.r2 import db
+    if db is None:
+        task_data['status'] = 'error'
+        task_data['message'] = 'ไม่สามารถเพิ่มเข้าคิวได้: ยังไม่ได้เชื่อมต่อ MongoDB'
+        tasks[task_id] = task_data
+        return task_id
 
-    thread = threading.Thread(target=_process_video_task, args=(task_id, series_name, ep_name, m3u8_url))
-    thread.start()
+    update_task_status(task_id, task_data)
     return task_id
 
 def _process_video_task(task_id, series_name, ep_name, m3u8_url):
     # Use lock to ensure only one heavy task runs at a time
-    if not task_lock.acquire(blocking=False):
-        update_task_status(task_id, {
-            'status': 'error',
-            'message': 'ระบบไม่สามารถเริ่มงานได้เนื่องจากมีงานอื่นกำลังดำเนินการอยู่'
-        })
-        return
+    # This lock is shared with image tasks
+    task_lock.acquire() 
 
     try:
+        update_task_status(task_id, {
+            'status': 'processing',
+            'message': 'กำลังเริ่มประมวลผล...'
+        })
+        
         tmp_dir = f"data/tmp_{task_id}"
         os.makedirs(tmp_dir, exist_ok=True)
 

@@ -34,6 +34,10 @@ def image_page():
 def manage_page():
     return render_template('manage.html')
 
+@app.route('/queue')
+def queue_page():
+    return render_template('queue.html')
+
 @app.route('/logs')
 def logs_page():
     return render_template('logs.html')
@@ -47,13 +51,24 @@ def settings_page():
             'cloudflare_secret_key': request.form.get('cloudflare_secret_key'),
             'cloudflare_api_token': request.form.get('cloudflare_api_token'),
             'r2_bucket_name': request.form.get('r2_bucket_name', 'data-series'),
-            'worker_domain': request.form.get('worker_domain', 'https://series.film01-thirx.workers.dev')
+            'worker_domain': request.form.get('worker_domain', 'https://series.film01-thirx.workers.dev'),
+            'mongodb_uri': request.form.get('mongodb_uri')
         }
         save_config(config)
+        
+        # Try to connect immediately
+        from utils.r2 import connect_mongodb
+        connect_mongodb(config['mongodb_uri'])
+        
         return render_template('settings.html', config=config, success=True)
     
     config = load_config()
     return render_template('settings.html', config=config)
+
+@app.route('/api/db/status')
+def db_status():
+    from utils.r2 import db
+    return jsonify({'connected': db is not None})
 
 # API Endpoints
 @app.route('/api/series', methods=['GET'])
@@ -119,6 +134,20 @@ def cancel_task_api(task_id):
     if success:
         return jsonify({'message': 'Task cancellation requested'})
     return jsonify({'error': 'Failed to cancel task'}), 500
+
+@app.route('/api/task/<task_id>/delete', methods=['POST'])
+def delete_task_api(task_id):
+    # This just removes it from the display/memory/DB for the queue view
+    from utils.ffmpeg import tasks
+    from utils.r2 import db
+    
+    if task_id in tasks:
+        del tasks[task_id]
+        
+    if db is not None:
+        db.tasks.delete_one({'task_id': task_id})
+        
+    return jsonify({'message': 'Task deleted'})
 
 @app.route('/api/series/<series_name>', methods=['GET'])
 def series_contents(series_name):

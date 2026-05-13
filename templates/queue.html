@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div>
+        <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">ติดตามคิวงาน</h2>
+        <p class="text-slate-400">แสดงสถานะการประมวลผลวิดีโอที่กำลังรอคิวและกำลังทำงาน</p>
+    </div>
+    <div class="flex gap-2">
+        <span class="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2">
+            <i class="fa-solid fa- layer-group"></i> คิวงานวิดีโอ
+        </span>
+    </div>
+</div>
+
+<div class="space-y-6">
+    <!-- Queue Section -->
+    <div id="queue-container" class="space-y-4">
+        <!-- Tasks will be injected here -->
+        <div id="empty-queue" class="hidden bg-slate-900/40 rounded-2xl border border-dashed border-slate-800 py-16 text-center">
+            <div class="bg-slate-800/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-600 border border-white/5">
+                <i class="fa-solid fa-check-double text-3xl"></i>
+            </div>
+            <p class="text-slate-400 font-medium text-lg">ไม่มีงานค้างในคิว</p>
+            <p class="text-slate-500 text-sm mt-1">คุณสามารถเพิ่มงานใหม่ได้จากเมนูจัดการวิดีโอ</p>
+        </div>
+
+        <div id="task-list" class="grid grid-cols-1 gap-4">
+            <!-- Dynamic Task Cards -->
+        </div>
+    </div>
+</div>
+
+<style>
+    @keyframes pulse-border {
+        0% { border-color: rgba(59, 130, 246, 0.2); }
+        50% { border-color: rgba(59, 130, 246, 0.6); }
+        100% { border-color: rgba(59, 130, 246, 0.2); }
+    }
+    .active-task-border {
+        animation: pulse-border 2s infinite;
+    }
+    .task-card {
+        transition: all 0.3s ease;
+    }
+    .task-card:hover {
+        transform: translateY(-2px);
+        background: rgba(30, 41, 59, 0.8);
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        updateQueue();
+        setInterval(updateQueue, 2000);
+    });
+
+    async function updateQueue() {
+        try {
+            const res = await fetch('/api/tasks');
+            const tasks = await res.json();
+            renderQueue(tasks);
+        } catch (e) {
+            console.error('Failed to update queue:', e);
+        }
+    }
+
+    function renderQueue(tasks) {
+        const taskList = document.getElementById('task-list');
+        const emptyState = document.getElementById('empty-queue');
+        
+        // Filter: only show video tasks that are 'queued', 'processing', or 'error'
+        // 'completed' tasks will be filtered out (auto-dismissed)
+        const relevantTasks = Object.values(tasks)
+            .filter(t => t.type === 'video' && (t.status === 'queued' || t.status === 'processing' || t.status === 'error'))
+            .sort((a, b) => {
+                // Processing first, then queued by time, then error
+                if (a.status === 'processing' && b.status !== 'processing') return -1;
+                if (b.status === 'processing' && a.status !== 'processing') return 1;
+                if (a.status === 'error' && b.status !== 'error') return 1;
+                if (b.status === 'error' && a.status !== 'error') return -1;
+                return 0; // maintain original order for queued
+            });
+
+        if (relevantTasks.length === 0) {
+            taskList.innerHTML = '';
+            emptyState.classList.remove('hidden');
+            return;
+        }
+
+        emptyState.classList.add('hidden');
+        
+        let html = '';
+        relevantTasks.forEach(task => {
+            const isProcessing = task.status === 'processing';
+            const isQueued = task.status === 'queued';
+            const isError = task.status === 'error';
+            
+            let statusBadge = '';
+            let cardClasses = 'task-card glass-panel p-5 rounded-2xl border border-white/5 relative overflow-hidden ';
+            let iconClass = '';
+            let progressColor = 'from-blue-600 to-blue-400';
+            
+            if (isProcessing) {
+                statusBadge = '<span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold uppercase animate-pulse">PROCESSING</span>';
+                cardClasses += 'active-task-border bg-blue-500/5';
+                iconClass = 'fa-circle-notch fa-spin text-blue-400';
+            } else if (isQueued) {
+                statusBadge = '<span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400 font-bold uppercase">IN QUEUE</span>';
+                iconClass = 'fa-clock text-slate-500';
+                progressColor = 'from-slate-600 to-slate-500';
+            } else if (isError) {
+                statusBadge = '<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold uppercase">ERROR</span>';
+                cardClasses += 'border-red-500/30 bg-red-500/5';
+                iconClass = 'fa-circle-exclamation text-red-400';
+            }
+
+            html += `
+                <div class="${cardClasses}" id="task-${task.task_id}">
+                    <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 relative z-10">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-slate-800/50 flex items-center justify-center shrink-0 border border-white/5">
+                                <i class="fa-solid ${iconClass} text-xl"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <h4 class="font-bold text-white truncate text-lg">${task.name || 'วิดีโอไม่มีชื่อ'}</h4>
+                                    ${statusBadge}
+                                </div>
+                                <p class="text-sm ${isError ? 'text-red-400' : 'text-slate-400'} truncate">${task.message || 'กำลังรอการประมวลผล...'}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-4 sm:min-w-[300px]">
+                            <div class="flex-1">
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-[10px] font-bold text-slate-500 uppercase">Progress</span>
+                                    <span class="text-xs font-bold ${isError ? 'text-red-400' : 'text-blue-400'}">${task.progress || '0%'}</span>
+                                </div>
+                                <div class="h-2 bg-slate-800 rounded-full overflow-hidden border border-white/5">
+                                    <div class="h-full bg-gradient-to-r ${progressColor} transition-all duration-500" style="width: ${task.progress || '0%'}"></div>
+                                </div>
+                            </div>
+                            
+                            <button onclick="deleteTask('${task.task_id}')" class="bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 p-2.5 rounded-xl border border-white/5 transition-all" title="ลบออกจากรายการ">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        taskList.innerHTML = html;
+    }
+
+    async function deleteTask(tid) {
+        if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้ออกจากรายการ?')) return;
+        
+        try {
+            const res = await fetch(`/api/task/${tid}/delete`, { method: 'POST' });
+            if (res.ok) {
+                showToast('ลบงานออกจากรายการแล้ว');
+                updateQueue();
+            } else {
+                showToast('ไม่สามารถลบงานได้', true);
+            }
+        } catch (e) {
+            showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', true);
+        }
+    }
+</script>
+{% endblock %}
