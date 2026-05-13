@@ -1,43 +1,22 @@
-import json
 import os
 import boto3
 from botocore.exceptions import ClientError
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
+from dotenv import load_dotenv
 
-CONFIG_FILE = 'data/config.json'
+# Load .env file for local development
+load_dotenv()
 
 # MongoDB Setup
 db = None
 
-def load_config():
-    # 1. Try MongoDB first
-    if db is not None:
-        try:
-            config = db.settings.find_one({'type': 'config'})
-            if config:
-                # Remove MongoDB internal ID
-                config_data = dict(config)
-                config_data.pop('_id', None)
-                config_data.pop('type', None)
-                return config_data
-        except Exception as e:
-            print(f"Error loading config from MongoDB: {e}")
-
-    # 2. Fallback to file
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
-
 def connect_mongodb(uri=None):
     global db
+    
+    # 1. Try URI from Environment Variable (Best for Render/VPS)
     if not uri:
-        config = load_config()
-        uri = config.get('mongodb_uri')
+        uri = os.environ.get('MONGODB_URI')
         
     if uri:
         try:
@@ -54,23 +33,33 @@ def connect_mongodb(uri=None):
 # Initial connection attempt
 connect_mongodb()
 
-def save_config(config_data):
-    # 1. Save to MongoDB
+def load_config():
+    # Load config exclusively from MongoDB
     if db is not None:
         try:
-            # We use type: config to identify the single config document
+            config = db.settings.find_one({'type': 'config'})
+            if config:
+                config_data = dict(config)
+                config_data.pop('_id', None)
+                config_data.pop('type', None)
+                return config_data
+        except Exception as e:
+            print(f"Error loading config from MongoDB: {e}")
+    return {}
+
+def save_config(config_data):
+    # Save config exclusively to MongoDB
+    if db is not None:
+        try:
             db.settings.update_one(
                 {'type': 'config'},
                 {'$set': config_data},
                 upsert=True
             )
+            return True
         except Exception as e:
             print(f"Error saving config to MongoDB: {e}")
-
-    # 2. Save to file (backward compatibility/local development)
-    os.makedirs('data', exist_ok=True)
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config_data, f)
+    return False
 
 def get_s3_client():
     config = load_config()
@@ -86,7 +75,7 @@ def get_s3_client():
         endpoint_url=f'https://{account_id}.r2.cloudflarestorage.com',
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        region_name='apac' # or 'auto'
+        region_name='apac'
     )
 
 def list_series_folders():
@@ -96,12 +85,10 @@ def list_series_folders():
     if not s3: return []
     
     try:
-        # We simulate folders by looking for common prefixes under series/
         result = s3.list_objects_v2(Bucket=bucket, Prefix='series/', Delimiter='/')
         folders = []
         if 'CommonPrefixes' in result:
             for prefix in result['CommonPrefixes']:
-                # prefix will be like "series/Name/"
                 folder_name = prefix['Prefix'].split('/')[-2]
                 folders.append(folder_name)
         return folders
@@ -116,7 +103,6 @@ def create_series_folder(series_name):
     if not s3: return False
     
     try:
-        # Just put a dummy 0-byte object or let the "folder" be implied when uploading items
         s3.put_object(Bucket=bucket, Key=f'series/{series_name}/')
         return True
     except ClientError as e:
@@ -138,19 +124,14 @@ def list_folder_contents(series_name):
         if 'Contents' in result:
             for item in result['Contents']:
                 key = item['Key']
-                # Skip the exact folder placeholder
-                if key == prefix:
-                    continue
+                if key == prefix: continue
                 
-                # Check what type of item it is
-                sub_path = key[len(prefix):] # e.g., "EP1/playlist.m3u8" or "cover.webp"
+                sub_path = key[len(prefix):]
                 parts = sub_path.split('/')
                 
                 if len(parts) == 1:
-                    # File at root of series folder (usually image)
                     images.append(sub_path)
                 elif len(parts) >= 2:
-                    # Inside a subfolder (EP)
                     eps.add(parts[0])
         
         return {'images': images, 'eps': list(eps)}
@@ -177,14 +158,13 @@ def upload_file_to_r2(local_path, s3_key, content_type=None):
     if not s3: return False
     
     extra_args = {}
-    if content_type:
-        extra_args['ContentType'] = content_type
+    if content_type: extra_args['ContentType'] = content_type
         
     try:
         s3.upload_file(local_path, bucket, s3_key, ExtraArgs=extra_args)
         return True
     except ClientError as e:
-        print(f"Error uploading {local_path} to {s3_key}: {e}")
+        print(f"Error uploading {local_path}: {e}")
         return False
 
 def delete_ep_folder(series_name, ep_name):
@@ -216,12 +196,10 @@ def delete_series_folder(series_name):
         while result.get('KeyCount', 0) > 0:
             objects_to_delete = [{'Key': obj['Key']} for obj in result['Contents']]
             s3.delete_objects(Bucket=bucket, Delete={'Objects': objects_to_delete})
-            # Handle pagination if more than 1000 objects
             if result.get('IsTruncated'):
                 result = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, ContinuationToken=result.get('NextContinuationToken'))
-            else:
-                break
+            else: break
         return True
     except ClientError as e:
-        print(f"Error deleting series folder: {e}")
+        print(f"Error deleting series: {e}")
         return False

@@ -1,11 +1,20 @@
-data/config.json
-data/uploads/*
-test_subs.py
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.venv
+venv/
+ENV/
+env/
 .env
+
+# Project specific
+data/
 data/uploads/
-__pycache__/
-*.pyc
-.env
+data/tmp_*
+data/config.json
+
+# IDEs
+.vscode/
+.idea/
 .DS_Store

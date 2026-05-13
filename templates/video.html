@@ -104,55 +104,15 @@
                     <i class="fa-solid fa-bolt"></i> เริ่มสร้างและแปลงไฟล์
                 </button>
             </div>
-
-            <!-- Progress Section -->
-            <div id="progress-container" class="md:col-span-2 hidden mt-2 bg-slate-900/60 p-5 md:p-6 rounded-2xl border border-white/5 shadow-inner">
-                <div class="flex justify-between items-end mb-3">
-                    <div class="flex items-center gap-3">
-                        <i class="fa-solid fa-circle-notch fa-spin text-purple-400 text-xl" id="progress-spinner"></i>
-                        <span id="progress-status" class="text-slate-300 font-medium">กำลังเตรียมการประมวลผล...</span>
-                    </div>
-                    <span id="progress-percent" class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-400">0%</span>
-                </div>
-                <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner border border-slate-700/50">
-                    <div id="progress-bar" class="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500 ease-out relative" style="width: 0%">
-                        <div class="absolute top-0 left-0 w-full h-full bg-white/20" style="animation: shimmer 2s infinite linear; background-image: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);"></div>
-                    </div>
-                </div>
-                
-                <!-- Result URL -->
-                <div id="result-container" class="hidden mt-6 pt-6 border-t border-white/5">
-                    <div class="flex items-center gap-2 text-emerald-400 mb-3 font-medium">
-                        <div class="bg-emerald-500/20 p-1.5 rounded-full"><i class="fa-solid fa-check"></i></div>
-                        ประมวลผลสำเร็จพร้อมใช้งาน
-                    </div>
-                    <div class="flex flex-col sm:flex-row gap-3">
-                        <div class="relative flex-1">
-                            <input type="text" id="result-url" readonly class="w-full bg-slate-950 text-slate-300 border border-slate-700 rounded-xl pl-4 pr-4 py-3 text-sm focus:outline-none font-mono">
-                        </div>
-                        <button onclick="copyResult()" class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap">
-                            <i class="fa-solid fa-copy"></i> คัดลอก
-                        </button>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
-
-<style>
-@keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-}
-</style>
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         loadSeries();
         checkDBStatus();
         setInterval(checkDBStatus, 5000);
-        resumeTask();
     });
 
     async function checkDBStatus() {
@@ -176,46 +136,6 @@
                 btn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> กรุณาตั้งค่า MongoDB';
             }
         } catch (e) {}
-    }
-
-    async function resumeTask() {
-        // No longer strictly needed as we have the queue page, 
-        // but we'll keep a simple check for 'processing' to show current status if user stays on page
-        try {
-            const allTasksRes = await fetch('/api/tasks');
-            const allTasks = await allTasksRes.json();
-            const activeTask = Object.values(allTasks).find(t => t.status === 'processing' && t.type === 'video');
-
-            if (activeTask) {
-                document.getElementById('progress-container').classList.remove('hidden');
-                updateProgressUI(activeTask);
-                // Start polling only if there is an active task
-                if (!checkInterval) {
-                    checkInterval = setInterval(async () => {
-                        const res = await fetch(`/api/task/${activeTask.task_id}`);
-                        const data = await res.json();
-                        updateProgressUI(data);
-                        if (data.status !== 'processing') {
-                            clearInterval(checkInterval);
-                            checkInterval = null;
-                        }
-                    }, 2000);
-                }
-            }
-        } catch (e) {}
-    }
-
-    function updateProgressUI(task) {
-        if (!task || task.status === 'not_found') return;
-        document.getElementById('progress-status').textContent = task.message;
-        document.getElementById('progress-percent').textContent = task.progress;
-        document.getElementById('progress-bar').style.width = task.progress;
-        
-        if (task.status === 'completed') {
-            document.getElementById('progress-spinner').className = 'fa-solid fa-check-circle text-emerald-400 text-xl';
-            document.getElementById('result-container').classList.remove('hidden');
-            document.getElementById('result-url').value = task.result_url;
-        }
     }
 
     async function loadSeries() {
@@ -268,13 +188,6 @@
         }
     }
 
-    function copyResult() {
-        const url = document.getElementById('result-url').value;
-        copyToClipboard(url);
-    }
-
-    let checkInterval;
-
     async function startConversion() {
         const series = document.getElementById('series-select').value;
         const ep = document.getElementById('ep-name').value.trim();
@@ -292,10 +205,6 @@
         btn.disabled = true;
         btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังส่งเข้าคิว...';
         btn.classList.add('opacity-70', 'cursor-not-allowed');
-        
-        // Hide old progress containers
-        document.getElementById('progress-container').classList.add('hidden');
-        document.getElementById('result-container').classList.add('hidden');
         
         try {
             const res = await fetch('/api/convert/video', {
@@ -323,14 +232,6 @@
             btn.innerHTML = originalHtml;
             btn.classList.remove('opacity-70', 'cursor-not-allowed');
         }
-    }
-
-    async function checkStatus(taskId, btn) {
-        // Obsolete
-    }
-    
-    function resetBtn(btn) {
-        // Obsolete
     }
 </script>
 {% endblock %}

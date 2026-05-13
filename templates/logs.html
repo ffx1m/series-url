@@ -1,293 +1,170 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="mb-8 flex justify-between items-end">
+<div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
     <div>
-        <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">ติดตามการทำงาน</h2>
-        <p class="text-slate-400">แสดงสถานะการประมวลผลและ Log แบบ Real-time</p>
+        <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">Live Monitor</h2>
+        <p class="text-slate-400">ติดตามการทำงานปัจจุบันและตรวจสอบข้อผิดพลาด</p>
     </div>
 </div>
 
-<div class="space-y-6">
+<div class="space-y-8">
     <!-- Active Tasks Section -->
-    <div id="active-tasks-container" class="space-y-4">
-        <h3 class="text-lg font-semibold text-white px-1 flex items-center gap-2">
-            <i class="fa-solid fa-spinner fa-spin text-blue-400"></i> งานที่กำลังดำเนินการ
-        </h3>
-        <div id="active-list" class="grid grid-cols-1 gap-4">
-            <!-- Processing tasks will be injected here -->
-            <div class="bg-slate-900/40 rounded-2xl border border-dashed border-slate-800 py-12 text-center">
-                <div class="bg-slate-800/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-600">
-                    <i class="fa-solid fa-mug-hot text-2xl"></i>
-                </div>
-                <p class="text-slate-500 font-medium">ยังไม่มีงานที่กำลังประมวลผลในขณะนี้</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Log Terminal Section -->
-    <div id="log-section" class="space-y-4 hidden">
-        <div class="flex justify-between items-center px-1">
-            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
-                <i class="fa-solid fa-terminal text-purple-400"></i> บันทึกการทำงาน (Live Logs)
-            </h3>
+    <div>
+        <div class="flex items-center gap-2 mb-4 px-1 text-blue-400">
+            <i class="fa-solid fa-circle-notch fa-spin"></i>
+            <h3 class="text-sm font-bold uppercase tracking-widest">กำลังดำเนินการ</h3>
         </div>
         
-        <div class="glass-panel rounded-2xl overflow-hidden border border-white/5 flex flex-col shadow-2xl">
-            <div id="log-header" class="bg-slate-900/90 px-5 py-3 border-b border-white/5 flex justify-between items-center">
-                <div class="flex items-center gap-3">
-                    <span id="active-task-name" class="text-sm font-mono text-blue-400 font-bold">TASK_NAME</span>
-                    <span id="active-task-status" class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold uppercase">PROCESSING</span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                    <span class="text-[10px] text-slate-500 font-mono">LIVE FEED</span>
-                </div>
-            </div>
-            <div id="log-content" class="h-[400px] md:h-[500px] bg-black/60 p-5 font-mono text-xs sm:text-sm text-slate-300 overflow-y-auto custom-scrollbar leading-relaxed">
-                <!-- Log lines injected here -->
-            </div>
+        <div id="active-tasks" class="space-y-4">
+            <!-- Active tasks injected here -->
+        </div>
+        
+        <div id="no-active-tasks" class="hidden glass-panel p-10 rounded-2xl border border-dashed border-slate-800 text-center">
+            <p class="text-slate-500 text-sm">ไม่มีงานที่กำลังประมวลผลในขณะนี้</p>
         </div>
     </div>
 
-    <!-- Recent History Section -->
-    <div class="pt-4 space-y-4">
-        <h3 class="text-lg font-semibold text-white px-1 flex items-center gap-2">
-            <i class="fa-solid fa-history text-slate-400"></i> ประวัติงานล่าสุด
-        </h3>
-        <div id="history-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <!-- Completed/Error tasks will be injected here -->
+    <!-- Failed Tasks Section -->
+    <div>
+        <div class="flex items-center gap-2 mb-4 px-1 text-red-400">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <h3 class="text-sm font-bold uppercase tracking-widest">งานที่ล้มเหลว</h3>
+        </div>
+        
+        <div id="failed-tasks" class="grid grid-cols-1 gap-4">
+            <!-- Failed tasks injected here -->
+        </div>
+        
+        <div id="no-failed-tasks" class="hidden glass-panel p-8 rounded-2xl border border-dashed border-slate-800 text-center text-slate-500 text-sm">
+            ไม่มีประวัติงานที่ผิดพลาด
         </div>
     </div>
 </div>
 
 <style>
-    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-    
-    .log-line { border-left: 2px solid transparent; padding-left: 12px; margin-bottom: 2px; transition: all 0.1s; }
-    .log-line:hover { background: rgba(255,255,255,0.03); border-left-color: #3b82f6; }
-    .log-error { color: #f87171; background: rgba(220, 38, 38, 0.05); }
-    .log-success { color: #34d399; }
-    .log-info { color: #60a5fa; }
+    .log-window {
+        font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        scrollbar-width: thin;
+        scrollbar-color: #334155 transparent;
+    }
+    .log-window::-webkit-scrollbar { width: 4px; }
+    .log-window::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
 </style>
 
 <script>
-    let activeTaskId = null;
-    let tasksData = {};
-    const cancelingTasks = new Set();
-
     document.addEventListener('DOMContentLoaded', () => {
-        updateTasks();
-        setInterval(updateTasks, 2000);
+        updateMonitor();
+        setInterval(updateDBStatus, 10000); // Check DB status occasionally
+        setInterval(updateMonitor, 2000);
     });
 
-    async function updateTasks() {
+    async function updateMonitor() {
         try {
             const res = await fetch('/api/tasks');
-            const data = await res.json();
-            tasksData = data;
-            renderAll(data);
+            const tasks = await res.json();
+            renderMonitor(tasks);
         } catch (e) {
-            console.error('Failed to update tasks:', e);
+            console.error('Monitor update failed', e);
         }
     }
 
-    function renderAll(tasks) {
-        const activeContainer = document.getElementById('active-list');
-        const historyContainer = document.getElementById('history-list');
-        const logSection = document.getElementById('log-section');
+    function renderMonitor(tasks) {
+        const activeContainer = document.getElementById('active-tasks');
+        const failedContainer = document.getElementById('failed-tasks');
+        const noActive = document.getElementById('no-active-tasks');
+        const noFailed = document.getElementById('no-failed-tasks');
+        
+        const taskArray = Object.values(tasks);
+        const activeList = taskArray.filter(t => t.status === 'processing');
+        const failedList = taskArray.filter(t => t.status === 'error');
 
-        const allTids = Object.keys(tasks).sort((a, b) => {
-            if (tasks[a].status === 'processing' && tasks[b].status !== 'processing') return -1;
-            if (tasks[a].status !== 'processing' && tasks[b].status === 'processing') return 1;
-            return b.localeCompare(a);
-        });
-
-        const processingTids = allTids.filter(tid => {
-            const isProcessing = tasks[tid].status === 'processing';
-            // Cleanup: if it's in canceling set but no longer processing in backend, remove it
-            if (!isProcessing) {
-                cancelingTasks.delete(tid);
-            }
-            return isProcessing;
-        });
-
-        const historyTids = allTids.filter(tid => tasks[tid].status !== 'processing').slice(0, 12);
-
-        if (processingTids.length > 0) {
-            let activeHtml = '';
-            processingTids.forEach(tid => {
-                const task = tasks[tid];
-                const isActive = tid === activeTaskId;
-
-                // Optimistic UI for cancellation
-                const isCanceling = cancelingTasks.has(tid);
-
-                const statusText = isCanceling ? 'กำลังส่งคำขอยกเลิก...' : (task.message || 'กำลังประมวลผล...');
-                const statusColor = isCanceling ? 'text-orange-400' : 'text-slate-400';
-                const progressColor = isCanceling ? 'from-orange-600 to-orange-400' : 'from-blue-600 to-blue-400';
-                const buttonClass = isCanceling 
-                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed border-slate-700' 
-                    : 'bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border-red-500/20';
-
-                activeHtml += `
-                    <div onclick="selectTask('${tid}')" class="glass-panel p-5 rounded-2xl border ${isActive ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'} cursor-pointer hover:border-white/20 transition-all shadow-lg relative group/card">
-                        <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                            <div class="flex items-center gap-4">
-                                <div class="w-12 h-12 rounded-xl ${isCanceling ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'} flex items-center justify-center shrink-0">
-                                    <i class="fa-solid ${isCanceling ? 'fa-spinner fa-spin' : (task.type === 'video' ? 'fa-video' : 'fa-image')} text-xl"></i>
+        // Render Active
+        if (activeList.length === 0) {
+            activeContainer.innerHTML = '';
+            noActive.classList.remove('hidden');
+        } else {
+            noActive.classList.add('hidden');
+            activeContainer.innerHTML = activeList.map(task => `
+                <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-blue-500 overflow-hidden relative">
+                    <div class="flex flex-col lg:flex-row gap-6">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-3 mb-2">
+                                <h4 class="text-lg font-bold text-white truncate">${task.name}</h4>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold animate-pulse">${task.status.toUpperCase()}</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mb-4">${task.message}</p>
+                            
+                            <div class="space-y-2 mb-4">
+                                <div class="flex justify-between text-xs font-bold">
+                                    <span class="text-slate-500 uppercase">Progress</span>
+                                    <span class="text-blue-400">${task.progress}</span>
                                 </div>
-                                <div class="min-w-0">
-                                    <h4 class="font-bold text-white truncate text-lg">${task.name || 'กำลังประมวลผล...'}</h4>
-                                    <p class="text-sm ${statusColor}">${statusText}</p>
+                                <div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-blue-500 transition-all duration-500" style="width: ${task.progress}"></div>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-4 sm:min-w-[250px]">
-                                <div class="flex-1">
-                                    <div class="flex justify-between mb-1">
-                                        <span class="text-[10px] font-bold text-slate-500 uppercase">Progress</span>
-                                        <span class="text-xs font-bold ${isCanceling ? 'text-orange-400' : 'text-blue-400'}">${task.progress}</span>
-                                    </div>
-                                    <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                        <div class="h-full bg-gradient-to-r ${progressColor} transition-all duration-500" style="width: ${task.progress}"></div>
-                                    </div>
-                                </div>
-                                <!-- Cancel Button -->
-                                <button ${isCanceling ? 'disabled' : ''} onclick="event.stopPropagation(); requestCancel('${tid}')" class="${buttonClass} px-3 py-2 rounded-lg border transition-all text-xs font-bold shrink-0 flex items-center gap-2">
-                                    <i class="fa-solid ${isCanceling ? 'fa-hourglass-half' : 'fa-xmark'}"></i> ${isCanceling ? 'ยกเลิกอยู่...' : 'ยกเลิก'}
-                                </button>
+                        </div>
+                        
+                        <div class="lg:w-1/2 flex flex-col">
+                            <div class="text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal"></i> Live Output
+                            </div>
+                            <div class="log-window auto-scroll-log w-full bg-slate-950/80 rounded-xl p-4 text-[11px] text-slate-300 h-48 overflow-y-auto border border-white/5">
+                                ${task.logs && task.logs.length > 0 ? task.logs.map(log => `<div class="mb-1 opacity-80 hover:opacity-100">${log}</div>`).join('') : '<span class="text-slate-600">Waiting for logs...</span>'}
                             </div>
                         </div>
                     </div>
-                `;
+                </div>
+            `).join('');
+        }
+
+        // Render Failed
+        if (failedList.length === 0) {
+            failedContainer.innerHTML = '';
+            noFailed.classList.remove('hidden');
+        } else {
+            noFailed.classList.add('hidden');
+            failedContainer.innerHTML = failedList.map(task => `
+                <div class="glass-panel p-5 rounded-xl border border-red-500/20 bg-red-500/5 flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400">
+                            <i class="fa-solid fa-circle-exclamation text-xl"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-white text-sm">${task.name}</h4>
+                            <p class="text-xs text-red-400/80">${task.message}</p>
+                        </div>
+                    </div>
+                    <button onclick="dismissTask('${task.task_id}')" class="bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 p-2.5 rounded-lg transition-all border border-white/5">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // Auto-scroll all log windows to bottom
+        setTimeout(() => {
+            document.querySelectorAll('.auto-scroll-log').forEach(el => {
+                el.scrollTop = el.scrollHeight;
             });
-            activeContainer.innerHTML = activeHtml;
-
-            if (!activeTaskId) {
-                selectTask(processingTids[0]);
-            }
-        } else {
-            activeContainer.innerHTML = `
-                <div class="bg-slate-900/40 rounded-2xl border border-dashed border-slate-800 py-12 text-center">
-                    <div class="bg-slate-800/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-600">
-                        <i class="fa-solid fa-mug-hot text-2xl"></i>
-                    </div>
-                    <p class="text-slate-500 font-medium">ยังไม่มีงานที่กำลังประมวลผลในขณะนี้</p>
-                </div>
-            `;
-            if (!(activeTaskId && tasks[activeTaskId] && tasks[activeTaskId].status !== 'processing')) {
-                logSection.classList.add('hidden');
-                activeTaskId = null;
-            }
-        }
-
-        let historyHtml = '';
-        historyTids.forEach(tid => {
-            const task = tasks[tid];
-            const isError = task.status === 'error';
-            historyHtml += `
-                <div onclick="selectTask('${tid}')" class="bg-slate-900/40 p-4 rounded-xl border border-white/5 hover:bg-slate-800/50 transition-all cursor-pointer group">
-                    <div class="flex justify-between items-start mb-2">
-                        <div class="min-w-0">
-                            <h5 class="text-sm font-bold text-slate-300 group-hover:text-white transition-colors truncate">${task.name || tid.slice(0,8)}</h5>
-                            <p class="text-[10px] text-slate-500 truncate">${task.type === 'video' ? 'วิดีโอ' : 'รูปภาพ'}</p>
-                        </div>
-                        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${isError ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}">${task.status}</span>
-                    </div>
-                    ${task.result_url ? `
-                        <div class="mt-2 text-[10px] text-blue-400 truncate font-mono bg-blue-500/5 p-1.5 rounded border border-blue-500/10">
-                            ${task.result_url}
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-        });
-        historyContainer.innerHTML = historyHtml || '<p class="text-slate-600 text-sm italic px-2">ยังไม่มีประวัติการทำงาน</p>';
-
-        if (activeTaskId && tasks[activeTaskId]) {
-            updateLogHeader(tasks[activeTaskId]);
-            renderLogs(tasks[activeTaskId]);
-        }
+        }, 50);
     }
 
-    function selectTask(tid) {
-        activeTaskId = tid;
-        const task = tasksData[tid];
-        if (task) {
-            document.getElementById('log-section').classList.remove('hidden');
-            updateLogHeader(task);
-            renderLogs(task, true);
-        }
-    }
-
-    function updateLogHeader(task) {
-        const isCanceling = cancelingTasks.has(task.task_id);
-        document.getElementById('active-task-name').textContent = task.name || task.task_id;
-        const statusEl = document.getElementById('active-task-status');
-
-        if (isCanceling) {
-            statusEl.textContent = 'CANCELING';
-            statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold uppercase';
-        } else {
-            statusEl.textContent = task.status.toUpperCase();
-            if (task.status === 'completed') statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase';
-            else if (task.status === 'error') statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold uppercase';
-            else statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold uppercase';
-        }
-    }
-
-    function renderLogs(task, forceScroll = false) {
-        const container = document.getElementById('log-content');
-        const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
-
-        if (!task.logs || task.logs.length === 0) {
-            container.innerHTML = `<div class="text-slate-600 italic">กำลังรอ Log จากระบบ...</div>`;
-            return;
-        }
-
-        let html = '';
-        task.logs.forEach(line => {
-            let typeClass = '';
-            const lowerLine = line.toLowerCase();
-            if (lowerLine.includes('error')) typeClass = 'log-error';
-            else if (lowerLine.includes('successfully') || lowerLine.includes('completed')) typeClass = 'log-success';
-            else if (lowerLine.includes('starting') || lowerLine.includes('uploaded') || lowerLine.includes('uploading')) typeClass = 'log-info';
-
-            html += `<div class="log-line ${typeClass}">${line}</div>`;
-        });
-
-        container.innerHTML = html;
-
-        if (forceScroll || wasAtBottom) {
-            container.scrollTop = container.scrollHeight;
-        }
-    }
-
-    async function requestCancel(tid) {
-        if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการยกเลิกงานนี้?')) return;
-
-        // Optimistic UI: Add to canceling set immediately
-        cancelingTasks.add(tid);
-        renderAll(tasksData);
-
+    async function dismissTask(tid) {
         try {
-            const res = await fetch(`/api/task/${tid}/cancel`, { method: 'POST' });
+            const res = await fetch(`/api/task/${tid}/delete`, { method: 'POST' });
             if (res.ok) {
-                showToast('ส่งคำขอยกเลิกงานแล้ว');
-                updateTasks();
-            } else {
-                showToast('ไม่สามารถยกเลิกงานได้', true);
-                cancelingTasks.delete(tid);
-                renderAll(tasksData);
+                showToast('ลบรายการที่ผิดพลาดแล้ว');
+                updateMonitor();
             }
         } catch (e) {
-            showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', true);
-            cancelingTasks.delete(tid);
-            renderAll(tasksData);
+            showToast('เกิดข้อผิดพลาดในการลบ', true);
         }
+    }
+
+    async function updateDBStatus() {
+        try { fetch('/api/db/status'); } catch(e) {}
     }
 </script>
 {% endblock %}
-

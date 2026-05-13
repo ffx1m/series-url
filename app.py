@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from werkzeug.utils import secure_filename
 
 from utils.r2 import (
@@ -51,19 +51,14 @@ def settings_page():
             'cloudflare_secret_key': request.form.get('cloudflare_secret_key'),
             'cloudflare_api_token': request.form.get('cloudflare_api_token'),
             'r2_bucket_name': request.form.get('r2_bucket_name', 'data-series'),
-            'worker_domain': request.form.get('worker_domain', 'https://series.film01-thirx.workers.dev'),
-            'mongodb_uri': request.form.get('mongodb_uri')
+            'worker_domain': request.form.get('worker_domain', 'https://series.film01-thirx.workers.dev')
         }
         save_config(config)
-        
-        # Try to connect immediately
-        from utils.r2 import connect_mongodb
-        connect_mongodb(config['mongodb_uri'])
-        
-        return render_template('settings.html', config=config, success=True)
+        return redirect(url_for('settings_page', success='1'))
     
     config = load_config()
-    return render_template('settings.html', config=config)
+    success = request.args.get('success') == '1'
+    return render_template('settings.html', config=config, success=success)
 
 @app.route('/api/db/status')
 def db_status():
@@ -137,17 +132,26 @@ def cancel_task_api(task_id):
 
 @app.route('/api/task/<task_id>/delete', methods=['POST'])
 def delete_task_api(task_id):
-    # This just removes it from the display/memory/DB for the queue view
-    from utils.ffmpeg import tasks
+    from utils.ffmpeg import tasks, cancel_task
     from utils.r2 import db
+    import shutil
     
+    # 1. Stop the task if it's running (this also handles process kill and lock release)
+    cancel_task(task_id)
+    
+    # 2. Cleanup files
+    tmp_dir = f"data/tmp_{task_id}"
+    if os.path.exists(tmp_dir):
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        
+    # 3. Remove from memory and DB
     if task_id in tasks:
         del tasks[task_id]
         
     if db is not None:
         db.tasks.delete_one({'task_id': task_id})
         
-    return jsonify({'message': 'Task deleted'})
+    return jsonify({'message': 'Task stopped, cleaned up, and deleted'})
 
 @app.route('/api/series/<series_name>', methods=['GET'])
 def series_contents(series_name):
