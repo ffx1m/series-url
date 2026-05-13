@@ -90,7 +90,10 @@
             // Surgically update or add task cards
             activeList.forEach(task => {
                 let card = document.getElementById(`task-${task.task_id}`);
+                let isFirstRender = false;
+
                 if (!card) {
+                    isFirstRender = true;
                     // Create new card if it doesn't exist
                     const tempDiv = document.createElement('div');
                     tempDiv.innerHTML = `
@@ -138,7 +141,10 @@
                 const logContent = card.querySelector('.log-content');
                 
                 // Sticky Scroll Logic
-                const isAtBottom = Math.abs(logWin.scrollHeight - logWin.clientHeight - logWin.scrollTop) < 50;
+                // If first render, we definitely want to scroll to bottom.
+                // If already rendered, only scroll if user was already at the bottom.
+                const isAtBottom = isFirstRender || (Math.abs(logWin.scrollHeight - logWin.clientHeight - logWin.scrollTop) < 60);
+                
                 const newLogsHtml = task.logs && task.logs.length > 0 
                     ? task.logs.map(log => `<div class="mb-1 opacity-80 hover:opacity-100">${log}</div>`).join('') 
                     : '<span class="text-slate-600">Waiting for logs...</span>';
@@ -146,7 +152,10 @@
                 if (logContent.innerHTML !== newLogsHtml) {
                     logContent.innerHTML = newLogsHtml;
                     if (isAtBottom) {
-                        logWin.scrollTop = logWin.scrollHeight;
+                        // Use a small timeout to ensure DOM has updated
+                        setTimeout(() => {
+                            logWin.scrollTop = logWin.scrollHeight;
+                        }, 10);
                     }
                 }
             });
