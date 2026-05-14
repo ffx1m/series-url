@@ -20,8 +20,8 @@
     
     <div class="mb-8 max-w-xl">
         <label class="block text-sm font-medium text-slate-300 mb-2">เลือกชื่อเรื่องซีรีส์ที่ต้องการจัดการ</label>
-        <div class="ts-dark-wrapper">
-            <select id="series-select" placeholder="ค้นหาหรือเลือกซีรีส์..." autocomplete="off">
+        <div id="search-wrapper" class="ts-dark-wrapper skeleton-box relative">
+            <select id="series-select" class="invisible" placeholder="ค้นหาหรือเลือกซีรีส์..." autocomplete="off">
                 <option value="">ค้นหาหรือเลือกซีรีส์...</option>
             </select>
         </div>
@@ -77,8 +77,29 @@
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
 .animate-fade-in {
     animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* Skeleton State */
+.skeleton-box {
+    min-height: 50px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 0.75rem;
+    position: relative;
+    overflow: hidden;
+}
+.skeleton-box.loading::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* Tom Select Dark Theme Overrides */
@@ -89,6 +110,11 @@
     border-radius: 0.75rem !important; /* rounded-xl */
     padding: 0.75rem 1rem !important;
     font-size: 16px !important; /* Minimum 16px to prevent iOS zoom */
+    transition: all 0.2s ease;
+    opacity: 0; /* Start hidden for fade-in */
+}
+.ts-wrapper.ready .ts-control {
+    opacity: 1;
 }
 .ts-wrapper.focus .ts-control {
     border-color: #3b82f6 !important; /* blue-500 */
@@ -101,6 +127,7 @@
     border-radius: 0.75rem !important;
     margin-top: 0.5rem !important;
     overflow: hidden;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
 }
 .ts-dropdown .active {
     background: #1e293b !important; /* slate-800 */
@@ -123,6 +150,10 @@
 
     async function loadSeriesList() {
         const select = document.getElementById('series-select');
+        const wrapper = document.getElementById('search-wrapper');
+        
+        wrapper.classList.add('loading');
+        
         try {
             const data = await fetchSeriesOptions();
             data.forEach(folder => {
@@ -142,8 +173,16 @@
                     no_results: (data, escape) => `<div class="no-results p-3 text-slate-500 text-sm">ไม่พบซีรีส์ "${escape(data.input)}"</div>`
                 }
             });
+            
+            // Transition from Skeleton to TomSelect
+            wrapper.classList.remove('skeleton-box', 'loading');
+            tsInstance.wrapper.classList.add('ready');
+            select.classList.remove('invisible');
+            
         } catch (e) {
             console.error('Failed to load series');
+            wrapper.classList.remove('loading');
+            wrapper.innerHTML = '<div class="p-3 text-red-400 text-sm"><i class="fa-solid fa-triangle-exclamation mr-2"></i>ไม่สามารถโหลดข้อมูลซีรีส์ได้</div>';
         }
     }
 
