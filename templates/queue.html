@@ -61,9 +61,6 @@
 <div id="job-list" class="space-y-3"></div>
 
 <style>
-    .job-log {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    }
     .filter-btn, .type-btn, .job-details summary {
         transition: all 0.2s ease;
     }
@@ -174,7 +171,6 @@
         const status = job.status || 'unknown';
         const stage = job.stage || status;
         const progress = job.progress || '0%';
-        const logs = Array.isArray(job.logs) ? job.logs.slice(-12) : [];
         const resultUrl = job.result_url || (job.result && job.result.url) || '';
         const isActive = status === 'processing' || status === 'queued';
         const isProcessing = status === 'processing';
@@ -237,7 +233,7 @@
 
                     <details class="job-details mt-3" ${openDetails.has(job.task_id) ? 'open' : ''} ontoggle="rememberDetails('${escapeAttr(escapeJs(job.task_id))}', this.open)">
                         <summary class="cursor-pointer text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-800">
-                            <i class="fa-solid fa-chevron-down"></i> Details and logs
+                            <i class="fa-solid fa-chevron-down"></i> Details
                         </summary>
                         <div class="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-3 text-xs">
                             <div class="bg-slate-900/50 rounded-lg px-3 py-2 border border-white/5">
@@ -258,9 +254,6 @@
                                 <input readonly value="${escapeAttr(resultUrl)}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-300 font-mono">
                             </div>
                         ` : ''}
-                        <div class="job-log bg-slate-950/80 rounded-lg border border-white/5 h-40 overflow-y-auto p-3 text-[11px] text-slate-300 mt-3">
-                            ${logs.length ? logs.map(log => `<div class="mb-1 opacity-80">${escapeHtml(log)}</div>`).join('') : '<span class="text-slate-600">No logs yet</span>'}
-                        </div>
                     </details>
                 </div>
             </div>
