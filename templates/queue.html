@@ -35,6 +35,10 @@
         <div class="text-[10px] uppercase font-bold text-red-400">Error</div>
         <div id="count-error" class="text-2xl font-bold text-white">0</div>
     </button>
+    <button data-filter="canceled" onclick="setFilter('canceled')" class="filter-btn glass-panel rounded-xl px-4 py-3 text-left">
+        <div class="text-[10px] uppercase font-bold text-amber-500">Canceled</div>
+        <div id="count-canceled" class="text-2xl font-bold text-white">0</div>
+    </button>
 </div>
 
 <div class="glass-panel rounded-2xl p-3 mb-5 flex flex-wrap items-center gap-2">
@@ -155,7 +159,8 @@
             queued: 0,
             processing: 0,
             completed: 0,
-            error: 0
+            error: 0,
+            canceled: 0
         };
         allJobs.forEach(job => {
             if (counts[job.status] !== undefined) counts[job.status] += 1;

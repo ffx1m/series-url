@@ -133,12 +133,12 @@ def list_jobs():
     if db is None:
         return []
     jobs = []
-    cursor = db.tasks.find({"status": {"$in": ["queued", "processing", "error", "completed"]}}).sort("created_at", 1)
+    cursor = db.tasks.find({"status": {"$in": ["queued", "processing", "error", "completed", "canceled"]}}).sort("created_at", 1)
     for job in cursor:
         job.pop("_id", None)
         jobs.append(job)
 
-    status_order = {"processing": 0, "queued": 1, "error": 2, "completed": 3}
+    status_order = {"processing": 0, "queued": 1, "error": 2, "completed": 3, "canceled": 4}
     jobs.sort(key=lambda item: status_order.get(item.get("status"), 99))
     return jobs
 
