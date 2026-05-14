@@ -20,9 +20,10 @@
             <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <i class="fa-solid fa-magnifying-glass text-slate-500"></i>
             </div>
-            <select id="series-select" onchange="loadContents()" class="w-full bg-slate-900/50 text-white border border-slate-700/50 rounded-xl pl-11 pr-10 py-3.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 appearance-none transition-all text-lg">
-                <option value="">-- ค้นหาและเลือกซีรีส์ --</option>
-            </select>
+            <input id="series-input" list="series-options" placeholder="ค้นหาหรือเลือกซีรีส์..." onchange="loadContents()" class="w-full bg-slate-900/50 text-white border border-slate-700/50 rounded-xl pl-11 pr-10 py-3.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-lg">
+            <datalist id="series-options">
+                <!-- Options will be populated dynamically -->
+            </datalist>
             <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
                 <i class="fa-solid fa-chevron-down text-slate-500 text-sm"></i>
             </div>
@@ -90,11 +91,11 @@
     document.addEventListener('DOMContentLoaded', loadSeriesList);
 
     async function loadSeriesList() {
-        const select = document.getElementById('series-select');
+        const datalist = document.getElementById('series-options');
         try {
             const data = await fetchSeriesOptions();
             data.forEach(folder => {
-                select.innerHTML += `<option value="${escapeHtml(folder)}">${escapeHtml(folder)}</option>`;
+                datalist.innerHTML += `<option value="${escapeHtml(folder)}">`;
             });
         } catch (e) {
             console.error('Failed to load series');
@@ -102,7 +103,7 @@
     }
 
     async function loadContents() {
-        const series = document.getElementById('series-select').value;
+        const series = document.getElementById('series-input').value;
         const container = document.getElementById('contents-container');
         const loader = document.getElementById('loading-state');
         const empty = document.getElementById('empty-state');
@@ -262,7 +263,7 @@
     }
 
     async function deleteSeries() {
-        const series = document.getElementById('series-select').value;
+        const series = document.getElementById('series-input').value;
         if (!series) return;
         
         if (!confirm(`คำเตือนร้ายแรง!\nคุณต้องการลบซีรีส์ "${series}" ใช่หรือไม่?\nไฟล์รูปภาพและตอน (EP) ทั้งหมดที่อยู่ข้างในจะถูกลบและไม่สามารถกู้คืนได้!`)) return;
