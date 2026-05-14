@@ -235,7 +235,7 @@
                         </div>
                     </div>
 
-                    <details class="job-details mt-3" ${openDetails.has(job.task_id) ? 'open' : ''} onchange="rememberDetails('${escapeAttr(escapeJs(job.task_id))}', this.open)">
+                    <details class="job-details mt-3" ${openDetails.has(job.task_id) ? 'open' : ''} ontoggle="rememberDetails('${escapeAttr(escapeJs(job.task_id))}', this.open)">
                         <summary class="cursor-pointer text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-800">
                             <i class="fa-solid fa-chevron-down"></i> Details and logs
                         </summary>
