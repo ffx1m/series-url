@@ -1,5 +1,6 @@
 import os
 import shutil
+import uuid
 
 from flask import Blueprint, current_app, jsonify, request
 from werkzeug.utils import secure_filename
@@ -19,6 +20,20 @@ from series_manager.services.r2_service import (
 from series_manager.services.validation import validate_http_url, validate_name
 
 api_bp = Blueprint("api", __name__)
+
+
+def job_response(job):
+    body = {"task_id": job["task_id"], "status": job["status"], "message": job["message"]}
+    if job.get("status") == "error":
+        return jsonify(body), 503
+    return jsonify(body)
+
+
+def get_job_or_404(task_id):
+    job = get_job(task_id)
+    if job.get("status") == "not_found":
+        return None
+    return job
 
 
 @api_bp.route("/db/status")
@@ -68,7 +83,7 @@ def convert_video():
         f"[{series_name}] - {ep_name}",
         {"series_name": series_name, "ep_name": ep_name, "m3u8_url": m3u8_url},
     )
-    return jsonify({"task_id": job["task_id"], "status": job["status"], "message": job["message"]})
+    return job_response(job)
 
 
 @api_bp.route("/convert/image", methods=["POST"])
@@ -85,7 +100,7 @@ def convert_image():
     if upload.filename == "":
         return jsonify({"error": "Missing file"}), 400
 
-    filename = secure_filename(upload.filename)
+    filename = f"{uuid.uuid4().hex}_{secure_filename(upload.filename)}"
     file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
     upload.save(file_path)
 
@@ -94,12 +109,20 @@ def convert_image():
         f"Image for {series_name}",
         {"series_name": series_name, "input_image_path": file_path},
     )
-    return jsonify({"task_id": job["task_id"], "status": job["status"], "message": job["message"]})
+    if job.get("status") == "error":
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+    return job_response(job)
 
 
 @api_bp.route("/task/<task_id>", methods=["GET"])
 def task_status(task_id):
-    return jsonify(get_job(task_id))
+    job = get_job_or_404(task_id)
+    if job is None:
+        return jsonify({"error": "Task not found", "status": "not_found"}), 404
+    return jsonify(job)
 
 
 @api_bp.route("/tasks", methods=["GET"])
@@ -114,6 +137,8 @@ def all_jobs():
 
 @api_bp.route("/task/<task_id>/cancel", methods=["POST"])
 def cancel_task(task_id):
+    if get_job_or_404(task_id) is None:
+        return jsonify({"error": "Task not found"}), 404
     request_cancel(task_id)
     terminate_task(task_id)
     return jsonify({"message": "Task cancellation requested"})
@@ -121,11 +146,16 @@ def cancel_task(task_id):
 
 @api_bp.route("/jobs/<task_id>", methods=["GET"])
 def job_status(task_id):
-    return jsonify(get_job(task_id))
+    job = get_job_or_404(task_id)
+    if job is None:
+        return jsonify({"error": "Job not found", "status": "not_found"}), 404
+    return jsonify(job)
 
 
 @api_bp.route("/jobs/<task_id>/cancel", methods=["POST"])
 def cancel_job(task_id):
+    if get_job_or_404(task_id) is None:
+        return jsonify({"error": "Job not found"}), 404
     request_cancel(task_id)
     terminate_task(task_id)
     return jsonify({"message": "Job cancellation requested"})
@@ -133,6 +163,8 @@ def cancel_job(task_id):
 
 @api_bp.route("/jobs/<task_id>", methods=["DELETE"])
 def delete_job_api(task_id):
+    if get_job_or_404(task_id) is None:
+        return jsonify({"error": "Job not found"}), 404
     terminate_task(task_id)
     tmp_dir = f"data/tmp_{task_id}"
     if os.path.exists(tmp_dir):
@@ -143,6 +175,8 @@ def delete_job_api(task_id):
 
 @api_bp.route("/task/<task_id>/delete", methods=["POST"])
 def delete_task(task_id):
+    if get_job_or_404(task_id) is None:
+        return jsonify({"error": "Task not found"}), 404
     terminate_task(task_id)
     tmp_dir = f"data/tmp_{task_id}"
     if os.path.exists(tmp_dir):
@@ -164,7 +198,10 @@ def create_image_job():
 @api_bp.route("/delete/object", methods=["POST"])
 def delete_item():
     data = request.get_json(silent=True) or {}
-    if delete_object(data.get("key")):
+    key = data.get("key")
+    if not key or not key.startswith("series/"):
+        return jsonify({"error": "Invalid object key"}), 400
+    if delete_object(key):
         return jsonify({"message": "Deleted successfully"})
     return jsonify({"error": "Failed to delete"}), 500
 

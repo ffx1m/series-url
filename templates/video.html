@@ -144,7 +144,7 @@
             const data = await fetchSeriesOptions();
             select.innerHTML = '<option value="">-- กรุณาเลือกซีรีส์ --</option>';
             data.forEach(folder => {
-                select.innerHTML += `<option value="${folder}">${folder}</option>`;
+                select.innerHTML += `<option value="${escapeHtml(folder)}">${escapeHtml(folder)}</option>`;
             });
         } catch (e) {
             select.innerHTML = '<option value="">โหลดข้อมูลล้มเหลว</option>';
@@ -214,7 +214,7 @@
             });
             const data = await res.json();
             
-            if (data.task_id) {
+            if (res.ok && data.task_id) {
                 showToast(`เพิ่มตอน ${ep} เข้าสู่คิวแล้ว`);
                 
                 // Reset form for next episode
@@ -224,7 +224,7 @@
                     window.location.href = '/queue';
                 }, 700);
             } else {
-                showToast(data.error || 'เกิดข้อผิดพลาดในการส่งงาน', true);
+                showToast(data.error || data.message || 'เกิดข้อผิดพลาดในการส่งงาน', true);
             }
         } catch (e) {
             console.error(e);
@@ -234,6 +234,15 @@
             btn.innerHTML = originalHtml;
             btn.classList.remove('opacity-70', 'cursor-not-allowed');
         }
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
     }
 </script>
 {% endblock %}

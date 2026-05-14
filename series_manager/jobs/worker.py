@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import threading
 import time
+from urllib.parse import quote
 
 from werkzeug.utils import secure_filename
 
@@ -22,6 +23,10 @@ from series_manager.services.r2_service import public_domain, upload_file_to_r2
 
 running_processes = {}
 worker_lock = threading.Lock()
+
+
+def public_url_for_key(s3_key):
+    return f"{public_domain()}/{'/'.join(quote(part) for part in s3_key.split('/'))}"
 
 
 def env_int(name, default):
@@ -261,6 +266,7 @@ def process_video_job(job):
                 message=f"Uploading: {uploaded_mb} MB / {total_mb} MB",
             )
 
+        playlist_key = f"series/{series_name}/{ep_name}/playlist.m3u8"
         update_job(
             task_id,
             status="completed",
@@ -268,7 +274,7 @@ def process_video_job(job):
             progress="100%",
             progress_value=100,
             message="Completed",
-            result={"url": f"{public_domain()}/series/{series_name}/{ep_name}/playlist.m3u8"},
+            result={"url": public_url_for_key(playlist_key)},
         )
     except RuntimeError as exc:
         running_processes.pop(task_id, None)
@@ -331,7 +337,7 @@ def process_image_job(job):
             update_job(task_id, status="error", stage="failed", message="R2 upload failed")
             return
 
-        result_url = f"{public_domain()}/{s3_key}"
+        result_url = public_url_for_key(s3_key)
         update_job(
             task_id,
             status="completed",

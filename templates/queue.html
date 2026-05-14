@@ -58,14 +58,23 @@
     <p class="text-slate-500 text-sm mt-1">สร้างงานใหม่จากเมนูวิดีโอหรือรูปภาพ แล้วกลับมาดูสถานะที่นี่</p>
 </div>
 
-<div id="job-list" class="space-y-4"></div>
+<div id="job-list" class="space-y-3"></div>
 
 <style>
     .job-log {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     }
-    .filter-btn, .type-btn {
+    .filter-btn, .type-btn, .job-details summary {
         transition: all 0.2s ease;
+    }
+    .job-details summary::-webkit-details-marker {
+        display: none;
+    }
+    .line-clamp-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }
 </style>
 
@@ -74,6 +83,7 @@
     let statusFilter = 'all';
     let typeFilter = 'all';
     let pollingPaused = false;
+    let openDetails = new Set();
 
     document.addEventListener('DOMContentLoaded', () => {
         refreshJobs();
@@ -161,7 +171,7 @@
         const status = job.status || 'unknown';
         const stage = job.stage || status;
         const progress = job.progress || '0%';
-        const logs = Array.isArray(job.logs) ? job.logs.slice(-8) : [];
+        const logs = Array.isArray(job.logs) ? job.logs.slice(-12) : [];
         const resultUrl = job.result_url || (job.result && job.result.url) || '';
         const isActive = status === 'processing' || status === 'queued';
         const isProcessing = status === 'processing';
@@ -172,42 +182,61 @@
         const theme = accentTheme(accent);
         const createdAt = formatDate(job.created_at);
         const heartbeat = formatDate(job.heartbeat_at);
+        const progressWidth = clampProgress(progress);
 
         return `
-            <div class="glass-panel rounded-2xl p-5 border ${theme.border} relative overflow-hidden" id="job-${job.task_id}">
-                <div class="flex flex-col lg:flex-row gap-5">
-                    <div class="flex-1 min-w-0">
-                        <div class="flex flex-wrap items-center gap-2 mb-2">
-                            <div class="w-10 h-10 rounded-xl bg-slate-900/70 border border-white/5 flex items-center justify-center ${theme.text}">
+            <div class="glass-panel rounded-xl border ${theme.border} overflow-hidden" id="job-${job.task_id}">
+                <div class="p-4">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center">
+                        <div class="flex items-start gap-3 min-w-0 flex-1">
+                            <div class="w-10 h-10 rounded-lg bg-slate-900/70 border border-white/5 flex items-center justify-center ${theme.text} shrink-0">
                                 <i class="fa-solid ${icon}"></i>
                             </div>
-                            <div class="min-w-0 flex-1">
-                                <h3 class="text-white font-bold text-lg truncate">${escapeHtml(job.name || job.task_id)}</h3>
-                                <div class="flex flex-wrap items-center gap-2 mt-1">
+                            <div class="min-w-0 flex-1 pt-0.5">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h3 class="text-white font-semibold truncate max-w-full">${escapeHtml(job.name || job.task_id)}</h3>
                                     ${statusBadge(status)}
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 uppercase font-bold">${escapeHtml(job.type || '-')}</span>
-                                    <span class="text-xs text-slate-500">stage: <span class="text-slate-300">${escapeHtml(stage)}</span></span>
                                 </div>
+                                <div class="flex flex-wrap items-center gap-2 mt-1">
+                                    <span class="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 uppercase font-bold">${escapeHtml(job.type || '-')}</span>
+                                    <span class="text-xs text-slate-500">${createdAt}</span>
+                                </div>
+                                <p class="${isError ? 'text-red-400' : 'text-slate-400'} text-sm mt-2 line-clamp-2">${escapeHtml(job.message || '-')}</p>
                             </div>
                         </div>
 
-                        <p class="${isError ? 'text-red-400' : 'text-slate-400'} text-sm mb-4">${escapeHtml(job.message || '-')}</p>
-
-                        <div class="mb-4">
-                            <div class="flex justify-between text-xs mb-1">
-                                <span class="text-slate-500 font-bold uppercase">Progress</span>
+                        <div class="lg:w-64">
+                            <div class="flex justify-between text-xs mb-1.5">
+                                <span class="text-slate-500 font-bold uppercase">${escapeHtml(stage)}</span>
                                 <span class="${theme.text} font-bold">${escapeHtml(progress)}</span>
                             </div>
-                            <div class="h-2.5 bg-slate-900 rounded-full overflow-hidden border border-white/5">
-                                <div class="h-full ${theme.bar} transition-all duration-700" style="width: ${escapeHtml(progress)}"></div>
+                            <div class="h-2 bg-slate-900 rounded-full overflow-hidden border border-white/5">
+                                <div class="h-full ${theme.bar} transition-all duration-700" style="width: ${progressWidth}"></div>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                            <div class="bg-slate-900/50 rounded-lg px-3 py-2 border border-white/5">
-                                <div class="text-slate-500 uppercase font-bold text-[10px]">Created</div>
-                                <div class="text-slate-300">${createdAt}</div>
-                            </div>
+                        <div class="flex flex-wrap gap-2 justify-end lg:w-auto">
+                            ${resultUrl ? `
+                                <button onclick="copyToClipboard('${escapeAttr(escapeJs(resultUrl))}')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            ` : ''}
+                            ${isActive ? `
+                                <button onclick="cancelJob('${escapeAttr(escapeJs(job.task_id))}')" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+                                    <i class="fa-solid fa-ban"></i> Cancel
+                                </button>
+                            ` : ''}
+                            <button onclick="deleteJob('${escapeAttr(escapeJs(job.task_id))}')" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-trash-can"></i> Delete
+                            </button>
+                        </div>
+                    </div>
+
+                    <details class="job-details mt-3" ${openDetails.has(job.task_id) ? 'open' : ''} onchange="rememberDetails('${escapeAttr(escapeJs(job.task_id))}', this.open)">
+                        <summary class="cursor-pointer text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-800">
+                            <i class="fa-solid fa-chevron-down"></i> Details and logs
+                        </summary>
+                        <div class="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-3 text-xs">
                             <div class="bg-slate-900/50 rounded-lg px-3 py-2 border border-white/5">
                                 <div class="text-slate-500 uppercase font-bold text-[10px]">Heartbeat</div>
                                 <div class="text-slate-300">${heartbeat}</div>
@@ -216,33 +245,20 @@
                                 <div class="text-slate-500 uppercase font-bold text-[10px]">Retries</div>
                                 <div class="text-slate-300">${job.retry_count || 0}</div>
                             </div>
+                            <div class="bg-slate-900/50 rounded-lg px-3 py-2 border border-white/5">
+                                <div class="text-slate-500 uppercase font-bold text-[10px]">Task ID</div>
+                                <div class="text-slate-300 truncate">${escapeHtml(job.task_id)}</div>
+                            </div>
                         </div>
-
                         ${resultUrl ? `
-                            <div class="mt-4 flex flex-col sm:flex-row gap-2">
-                                <input readonly value="${escapeAttr(resultUrl)}" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono">
-                                <button onclick="copyToClipboard('${escapeAttr(resultUrl)}')" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-sm flex items-center justify-center gap-2">
-                                    <i class="fa-solid fa-copy"></i> Copy
-                                </button>
+                            <div class="mt-3">
+                                <input readonly value="${escapeAttr(resultUrl)}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-300 font-mono">
                             </div>
                         ` : ''}
-                    </div>
-
-                    <div class="lg:w-[360px] flex flex-col gap-3">
-                        <div class="job-log bg-slate-950/80 rounded-xl border border-white/5 h-44 overflow-y-auto p-3 text-[11px] text-slate-300">
+                        <div class="job-log bg-slate-950/80 rounded-lg border border-white/5 h-40 overflow-y-auto p-3 text-[11px] text-slate-300 mt-3">
                             ${logs.length ? logs.map(log => `<div class="mb-1 opacity-80">${escapeHtml(log)}</div>`).join('') : '<span class="text-slate-600">No logs yet</span>'}
                         </div>
-                        <div class="flex gap-2 justify-end">
-                            ${isActive ? `
-                                <button onclick="cancelJob('${job.task_id}')" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-3 py-2 rounded-xl text-sm flex items-center gap-2">
-                                    <i class="fa-solid fa-ban"></i> Cancel
-                                </button>
-                            ` : ''}
-                            <button onclick="deleteJob('${job.task_id}')" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-2 rounded-xl text-sm flex items-center gap-2">
-                                <i class="fa-solid fa-trash-can"></i> Delete
-                            </button>
-                        </div>
-                    </div>
+                    </details>
                 </div>
             </div>
         `;
@@ -323,6 +339,25 @@
 
     function escapeAttr(value) {
         return escapeHtml(value).replaceAll('`', '&#096;');
+    }
+
+    function escapeJs(value) {
+        return String(value ?? '')
+            .replaceAll('\\', '\\\\')
+            .replaceAll("'", "\\'")
+            .replaceAll('\n', '\\n')
+            .replaceAll('\r', '\\r');
+    }
+
+    function clampProgress(progress) {
+        const numeric = Number.parseFloat(String(progress).replace('%', ''));
+        if (!Number.isFinite(numeric)) return '0%';
+        return `${Math.min(Math.max(numeric, 0), 100)}%`;
+    }
+
+    function rememberDetails(taskId, isOpen) {
+        if (isOpen) openDetails.add(taskId);
+        else openDetails.delete(taskId);
     }
 </script>
 {% endblock %}

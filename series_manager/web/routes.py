@@ -32,7 +32,7 @@ def queue_page():
 
 @web_bp.route("/logs")
 def logs_page():
-    return redirect(url_for("web.queue_page"))
+    return render_template("logs.html")
 
 
 @web_bp.route("/settings", methods=["GET", "POST"])

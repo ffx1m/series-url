@@ -1,12 +1,38 @@
 import os
 import threading
+from hmac import compare_digest
 
-from flask import Flask
+from flask import Flask, Response, request
 
 from .api.routes import api_bp
 from .web.routes import web_bp
 from .db import connect_mongodb
 from .jobs.worker import worker_loop
+
+
+def require_admin_auth(app):
+    password = os.environ.get("ADMIN_PASSWORD")
+    if not password:
+        return
+
+    username = os.environ.get("ADMIN_USERNAME", "admin")
+
+    @app.before_request
+    def check_admin_auth():
+        if request.endpoint == "static":
+            return None
+        auth = request.authorization
+        if (
+            auth
+            and compare_digest(auth.username or "", username)
+            and compare_digest(auth.password or "", password)
+        ):
+            return None
+        return Response(
+            "Authentication required",
+            401,
+            {"WWW-Authenticate": 'Basic realm="Series Manager"'},
+        )
 
 
 def create_app():
@@ -21,6 +47,7 @@ def create_app():
     os.makedirs("data", exist_ok=True)
 
     connect_mongodb()
+    require_admin_auth(app)
 
     app.register_blueprint(web_bp)
     app.register_blueprint(api_bp, url_prefix="/api")

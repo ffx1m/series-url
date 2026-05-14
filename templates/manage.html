@@ -94,7 +94,7 @@
         try {
             const data = await fetchSeriesOptions();
             data.forEach(folder => {
-                select.innerHTML += `<option value="${folder}">${folder}</option>`;
+                select.innerHTML += `<option value="${escapeHtml(folder)}">${escapeHtml(folder)}</option>`;
             });
         } catch (e) {
             console.error('Failed to load series');
@@ -117,7 +117,7 @@
         loader.classList.remove('hidden');
         
         try {
-            const res = await fetch(`/api/series/${series}`);
+            const res = await fetch(`/api/series/${encodeURIComponent(series)}`);
             const data = await res.json();
             currentDomain = data.domain.replace(/\/$/, ""); // Remove trailing slash
             
@@ -154,25 +154,25 @@
         }
         
         images.forEach(img => {
-            const url = `${currentDomain}/series/${series}/${img}`;
+            const url = `${currentDomain}/series/${encodePathPart(series)}/${encodePathPart(img)}`;
             const key = `series/${series}/${img}`;
             
             list.innerHTML += `
                 <div class="flex items-center justify-between p-4 bg-slate-800/40 rounded-xl border border-white/5 hover:border-white/10 transition-colors group">
                     <div class="flex items-center gap-4 overflow-hidden">
                         <div class="w-12 h-12 bg-slate-900 rounded-lg flex items-center justify-center shrink-0 overflow-hidden relative">
-                            <img src="${url}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" onerror="this.outerHTML='<i class=\\'fa-solid fa-file-image text-slate-500 text-xl\\'></i>'">
+                            <img src="${escapeAttr(url)}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" onerror="this.outerHTML='<i class=\\'fa-solid fa-file-image text-slate-500 text-xl\\'></i>'">
                         </div>
                         <div class="min-w-0">
-                            <p class="text-sm font-medium text-slate-200 truncate" title="${img}">${img}</p>
-                            <a href="${url}" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 truncate block mt-0.5"><i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>ดูรูปภาพ</a>
+                            <p class="text-sm font-medium text-slate-200 truncate" title="${escapeAttr(img)}">${escapeHtml(img)}</p>
+                            <a href="${escapeAttr(url)}" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 truncate block mt-0.5"><i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>ดูรูปภาพ</a>
                         </div>
                     </div>
                     <div class="flex gap-2 shrink-0 ml-4">
-                        <button onclick="copyToClipboard('${url}')" class="bg-slate-700 hover:bg-slate-600 text-white p-2.5 rounded-lg transition-colors" title="คัดลอก URL">
+                        <button onclick="copyToClipboard('${escapeAttr(escapeJs(url))}')" class="bg-slate-700 hover:bg-slate-600 text-white p-2.5 rounded-lg transition-colors" title="คัดลอก URL">
                             <i class="fa-solid fa-link"></i>
                         </button>
-                        <button onclick="deleteItem('${key}')" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 p-2.5 rounded-lg transition-colors" title="ลบไฟล์">
+                        <button onclick="deleteItem('${escapeAttr(escapeJs(key))}')" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 p-2.5 rounded-lg transition-colors" title="ลบไฟล์">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
@@ -197,7 +197,7 @@
         });
 
         eps.forEach(ep => {
-            const url = `${currentDomain}/series/${series}/${ep}/playlist.m3u8`;
+            const url = `${currentDomain}/series/${encodePathPart(series)}/${encodePathPart(ep)}/playlist.m3u8`;
             
             list.innerHTML += `
                 <div class="bg-slate-800/40 p-5 rounded-xl border border-white/5 hover:border-purple-500/30 transition-all flex flex-col gap-4 group relative overflow-hidden">
@@ -206,13 +206,13 @@
                         <div class="bg-slate-900 p-2.5 rounded-lg text-purple-400">
                             <i class="fa-solid fa-folder-open"></i>
                         </div>
-                        <span class="font-semibold text-white text-lg">${ep}</span>
+                        <span class="font-semibold text-white text-lg">${escapeHtml(ep)}</span>
                     </div>
                     <div class="flex gap-2 mt-auto relative z-10">
-                        <button onclick="copyToClipboard('${url}')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+                        <button onclick="copyToClipboard('${escapeAttr(escapeJs(url))}')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
                             <i class="fa-solid fa-link"></i> ลิงก์ .m3u8
                         </button>
-                        <button onclick="deleteEp('${series}', '${ep}')" class="flex-none bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-2 rounded-lg transition-colors text-sm flex items-center justify-center" title="ลบโฟลเดอร์นี้">
+                        <button onclick="deleteEp('${escapeAttr(escapeJs(series))}', '${escapeAttr(escapeJs(ep))}')" class="flex-none bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-2 rounded-lg transition-colors text-sm flex items-center justify-center" title="ลบโฟลเดอร์นี้">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
@@ -282,6 +282,31 @@
         } catch (e) {
             console.error(e);
         }
+    }
+
+    function encodePathPart(value) {
+        return encodeURIComponent(value).replaceAll('%2F', '/');
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    function escapeAttr(value) {
+        return escapeHtml(value).replaceAll('`', '&#096;');
+    }
+
+    function escapeJs(value) {
+        return String(value ?? '')
+            .replaceAll('\\', '\\\\')
+            .replaceAll("'", "\\'")
+            .replaceAll('\n', '\\n')
+            .replaceAll('\r', '\\r');
     }
 </script>
 {% endblock %}
