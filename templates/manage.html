@@ -1,6 +1,10 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<!-- Tom Select CSS -->
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+
 <div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
     <div>
         <h2 class="text-3xl font-bold text-white mb-2 tracking-wide">คลังไฟล์ข้อมูล</h2>
@@ -16,17 +20,10 @@
     
     <div class="mb-8 max-w-xl">
         <label class="block text-sm font-medium text-slate-300 mb-2">เลือกชื่อเรื่องซีรีส์ที่ต้องการจัดการ</label>
-        <div class="relative">
-            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <i class="fa-solid fa-magnifying-glass text-slate-500"></i>
-            </div>
-            <input id="series-input" list="series-options" placeholder="ค้นหาหรือเลือกซีรีส์..." onchange="loadContents()" class="w-full bg-slate-900/50 text-white border border-slate-700/50 rounded-xl pl-11 pr-10 py-3.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-lg">
-            <datalist id="series-options">
-                <!-- Options will be populated dynamically -->
-            </datalist>
-            <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                <i class="fa-solid fa-chevron-down text-slate-500 text-sm"></i>
-            </div>
+        <div class="ts-dark-wrapper">
+            <select id="series-select" placeholder="ค้นหาหรือเลือกซีรีส์..." autocomplete="off">
+                <option value="">ค้นหาหรือเลือกซีรีส์...</option>
+            </select>
         </div>
     </div>
 
@@ -83,19 +80,66 @@
 .animate-fade-in {
     animation: fadeIn 0.4s ease-out forwards;
 }
+
+/* Tom Select Dark Theme Overrides */
+.ts-control {
+    background: #0f172a !important; /* slate-900 */
+    color: #f8fafc !important; /* slate-50 */
+    border: 1px solid #334155 !important; /* slate-700 */
+    border-radius: 0.75rem !important; /* rounded-xl */
+    padding: 0.75rem 1rem !important;
+    font-size: 1.125rem !important; /* text-lg */
+}
+.ts-wrapper.focus .ts-control {
+    border-color: #3b82f6 !important; /* blue-500 */
+    box-shadow: 0 0 0 1px #3b82f6 !important;
+}
+.ts-dropdown {
+    background: #0f172a !important;
+    color: #f8fafc !important;
+    border: 1px solid #334155 !important;
+    border-radius: 0.75rem !important;
+    margin-top: 0.5rem !important;
+    overflow: hidden;
+}
+.ts-dropdown .active {
+    background: #1e293b !important; /* slate-800 */
+    color: #3b82f6 !important;
+}
+.ts-dropdown .option {
+    padding: 0.75rem 1rem !important;
+}
+.ts-control input {
+    color: #f8fafc !important;
+}
 </style>
 
 <script>
     let currentDomain = '';
+    let tsInstance = null;
 
     document.addEventListener('DOMContentLoaded', loadSeriesList);
 
     async function loadSeriesList() {
-        const datalist = document.getElementById('series-options');
+        const select = document.getElementById('series-select');
         try {
             const data = await fetchSeriesOptions();
             data.forEach(folder => {
-                datalist.innerHTML += `<option value="${escapeHtml(folder)}">`;
+                const opt = document.createElement('option');
+                opt.value = folder;
+                opt.textContent = folder;
+                select.appendChild(opt);
+            });
+            
+            // Initialize Tom Select
+            tsInstance = new TomSelect(select, {
+                create: false,
+                sortField: {field: "text", direction: "asc"},
+                onChange: loadContents,
+                maxOptions: 500,
+                render: {
+                    no_results: (data, escape) => `<div class="no-results p-3 text-slate-500 text-sm">ไม่พบซีรีส์ "${escape(data.input)}"</div>`
+                }
             });
         } catch (e) {
             console.error('Failed to load series');
@@ -103,7 +147,7 @@
     }
 
     async function loadContents() {
-        const series = document.getElementById('series-input').value;
+        const series = tsInstance ? tsInstance.getValue() : '';
         const container = document.getElementById('contents-container');
         const loader = document.getElementById('loading-state');
         const empty = document.getElementById('empty-state');
@@ -263,7 +307,7 @@
     }
 
     async function deleteSeries() {
-        const series = document.getElementById('series-input').value;
+        const series = tsInstance ? tsInstance.getValue() : '';
         if (!series) return;
         
         if (!confirm(`คำเตือนร้ายแรง!\nคุณต้องการลบซีรีส์ "${series}" ใช่หรือไม่?\nไฟล์รูปภาพและตอน (EP) ทั้งหมดที่อยู่ข้างในจะถูกลบและไม่สามารถกู้คืนได้!`)) return;
