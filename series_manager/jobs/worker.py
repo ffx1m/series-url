@@ -311,7 +311,7 @@ def process_image_job(job):
             pass
         update_job(task_id, stage="transcoding", message="Converting image to WebP", progress="20%", progress_value=20)
         heartbeat.beat(force=True)
-        cmd = ["ffmpeg", "-y", "-i", input_image_path, "-c:v", "libwebp", "-quality", "80", output_webp]
+        cmd = ["ffmpeg", "-y", "-i", input_image_path, "-c:v", "libwebp", "-compression_level", "6", "-preset", "picture", "-quality", "75", output_webp]
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         running_processes[task_id] = process
 
