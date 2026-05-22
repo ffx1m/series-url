@@ -20,7 +20,15 @@
     
     <div class="mb-8 max-w-xl">
         <label class="block text-sm font-medium text-slate-300 mb-2">เลือกชื่อเรื่องซีรีส์ที่ต้องการจัดการ</label>
-        <div class="ts-dark-wrapper">
+        
+        <!-- Skeleton Placeholder: แสดงตอนโหลดครั้งแรก -->
+        <div id="series-select-skeleton" class="ts-placeholder flex items-center justify-between">
+            <span class="text-slate-500 text-sm">กำลังโหลดรายชื่อซีรีส์...</span>
+            <i class="fa-solid fa-circle-notch fa-spin text-slate-600 text-sm"></i>
+        </div>
+
+        <!-- Real Select Wrapper: ซ่อนไว้ก่อนจนกว่าจะพร้อม -->
+        <div id="series-select-wrapper" class="ts-dark-wrapper hidden">
             <select id="series-select" placeholder="ค้นหาหรือเลือกซีรีส์..." autocomplete="off">
                 <option value="">ค้นหาหรือเลือกซีรีส์...</option>
             </select>
@@ -82,13 +90,17 @@
 }
 
 /* Tom Select Dark Theme Overrides */
-.ts-control {
+.ts-control, .ts-placeholder {
     background: #0f172a !important; /* slate-900 */
     color: #f8fafc !important; /* slate-50 */
     border: 1px solid #334155 !important; /* slate-700 */
     border-radius: 0.75rem !important; /* rounded-xl */
     padding: 0.75rem 1rem !important;
-    font-size: 16px !important; /* Minimum 16px to prevent iOS zoom */
+    font-size: 16px !important;
+    min-height: 48px;
+}
+.ts-placeholder {
+    cursor: wait;
 }
 .ts-wrapper.focus .ts-control {
     border-color: #3b82f6 !important; /* blue-500 */
@@ -111,7 +123,7 @@
 }
 .ts-control input {
     color: #f8fafc !important;
-    font-size: 16px !important; /* Minimum 16px to prevent iOS zoom */
+    font-size: 16px !important;
 }
 </style>
 
@@ -123,6 +135,9 @@
 
     async function loadSeriesList() {
         const select = document.getElementById('series-select');
+        const skeleton = document.getElementById('series-select-skeleton');
+        const wrapper = document.getElementById('series-select-wrapper');
+
         try {
             const data = await fetchSeriesOptions();
             data.forEach(folder => {
@@ -135,15 +150,22 @@
             // Initialize Tom Select
             tsInstance = new TomSelect(select, {
                 create: false,
-                sortField: {field: "text", direction: "asc"},
+                sortField: null, // ใช้ลำดับตามที่ API ส่งมา (ล่าสุดอยู่บนสุด)
                 onChange: loadContents,
                 maxOptions: 500,
                 render: {
                     no_results: (data, escape) => `<div class="no-results p-3 text-slate-500 text-sm">ไม่พบซีรีส์ "${escape(data.input)}"</div>`
                 }
             });
+
+            // สลับ UI จาก Skeleton เป็นของจริง
+            skeleton.classList.add('hidden');
+            wrapper.classList.remove('hidden');
+            wrapper.classList.add('animate-fade-in');
+
         } catch (e) {
             console.error('Failed to load series');
+            skeleton.innerHTML = '<span class="text-red-400 text-sm">โหลดข้อมูลล้มเหลว</span>';
         }
     }
 

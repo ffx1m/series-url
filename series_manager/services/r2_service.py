@@ -36,11 +36,29 @@ def list_series_folders():
     if not s3:
         return []
     try:
+        # ดึงรายชื่อ objects ที่เป็น folder markers (คีย์ที่ลงท้ายด้วย /) 
+        # เพื่อเอาข้อมูล LastModified มาเรียงลำดับ
         result = s3.list_objects_v2(Bucket=bucket_name(), Prefix="series/", Delimiter="/")
-        return [
-            prefix["Prefix"].split("/")[-2]
-            for prefix in result.get("CommonPrefixes", [])
-        ]
+        
+        folders = []
+        # ดึงจาก CommonPrefixes (โฟลเดอร์ที่มีของข้างในแต่ไม่มี marker object)
+        # หมายเหตุ: CommonPrefixes ไม่มี LastModified ดังนั้นเราจะพยายามหาข้อมูลเพิ่ม
+        for prefix_obj in result.get("CommonPrefixes", []):
+            name = prefix_obj["Prefix"].split("/")[-2]
+            # พยายามหา object ล่าสุดในโฟลเดอร์นี้เพื่อเอาเวลามาอ้างอิง
+            last_mod = None
+            try:
+                sub_res = s3.list_objects_v2(Bucket=bucket_name(), Prefix=prefix_obj["Prefix"], MaxKeys=1)
+                if sub_res.get("Contents"):
+                    last_mod = sub_res["Contents"][0]["LastModified"]
+            except Exception:
+                pass
+            folders.append({"name": name, "last_modified": last_mod})
+
+        # เรียงลำดับตามเวลาล่าสุด (ถ้าไม่มีเวลาให้ไปอยู่ล่างสุด)
+        folders.sort(key=lambda x: x["last_modified"].timestamp() if x["last_modified"] else 0, reverse=True)
+        
+        return [f["name"] for f in folders]
     except ClientError as exc:
         print(f"Error listing series folders: {exc}")
         return []
